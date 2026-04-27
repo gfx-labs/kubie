@@ -1,6 +1,8 @@
 # Kubie
-> [!IMPORTANT]
-> Please see issue [#385](https://github.com/sbstp/kubie/issues/385) regarding the future of Kubie development.
+
+> [!NOTE]
+> This is a fork of [sbstp/kubie](https://github.com/sbstp/kubie) with significant new features.
+> See [upstream issue #385](https://github.com/sbstp/kubie/issues/385) regarding the future of upstream development.
 
 <img src="./assets/logo.svg" align="right"/>
 
@@ -12,6 +14,20 @@ the paths where kubie will look for contexts, see the [settings](#settings) sect
 Kubie also has other nice features such as `kubie exec` which allows you to execute commands in a context and a
 namespace without having to spawn a shell and `kubie lint` which scans your k8s config files for issues and informs
 you of what they are.
+
+### Fork additions
+
+This fork adds the following features on top of upstream kubie:
+
+- **Interactive TUI picker** -- replaced skim with a custom ratatui + nucleo fuzzy finder featuring match highlighting, a preview pane with cluster metadata, and tabbed source filtering (Left/Right to switch between All / per-provider views)
+- **Remote provider discovery** -- auto-discover Kubernetes clusters from cloud APIs (DigitalOcean, Rancher, GKE) and fetch kubeconfigs on demand; configured under the `providers:` key in `kubie.yaml`
+- **`Secret` type with lazy expansion** -- provider config fields that hold secrets support `${VAR}`, `${VAR:-default}`, and `$(command)` syntax; expansion is lazy (commands only run when the value is first needed, not at config load time)
+- **Frecency sorting** -- the picker sorts contexts by a frequency + recency score so your most-used clusters float to the top; selection history is stored at `~/.local/share/kubie/frecency.json`
+- **Non-blocking background sync** -- the picker opens instantly with cached data while provider APIs are queried in the background; new clusters stream in as they're discovered
+- **`--local` flag** -- skip all remote providers and only show local kubeconfig contexts (`kubie ctx --local`)
+- **`--no-sync` flag** -- use cached provider metadata without contacting remote APIs (`kubie ctx --no-sync`)
+- **Configurable preview pane** -- `picker.preview.width` (percentage, 0 to disable) and `picker.preview.min` (minimum terminal columns to show preview)
+- **Makefile** -- `make install` builds a release binary and installs to `~/.local/bin` with shell completions
 
 * [Installation](#installation)
 * [Usage](#usage)
