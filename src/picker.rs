@@ -66,8 +66,10 @@ struct PickerState {
     scroll_offset: usize,
     /// Channel for receiving new items from background threads.
     rx: Option<mpsc::Receiver<Vec<PickerItem>>>,
-    /// Width of the preview pane as a percentage (0 = disabled, 1-80).
+    /// Preview pane width percentage (0 = disabled, 1-80).
     preview_width: u16,
+    /// Minimum terminal columns to show preview.
+    preview_min: u16,
 }
 
 impl PickerState {
@@ -103,7 +105,8 @@ impl PickerState {
             active_tab: 0,
             scroll_offset: 0,
             rx,
-            preview_width: picker_settings.preview_width.min(80),
+            preview_width: picker_settings.preview.width.min(80),
+            preview_min: picker_settings.preview.min,
         }
     }
 
@@ -318,6 +321,7 @@ fn render(frame: &mut Frame, state: &mut PickerState) {
     // Main area.
     let main_area = areas[area_idx];
     let has_preview = state.preview_width > 0
+        && area.width >= state.preview_min
         && state.selected_item().is_some_and(|item| !item.preview.is_empty());
     if has_preview {
         let list_pct = 100 - state.preview_width;

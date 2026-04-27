@@ -54,22 +54,47 @@ pub struct Fzf {
 /// TUI picker settings.
 #[derive(Debug, Deserialize)]
 pub struct Picker {
-    /// Width of the preview pane as a percentage of the terminal width (0-80).
-    /// Set to 0 to disable the preview pane entirely. Default: 40.
-    #[serde(default = "def_preview_width")]
-    pub preview_width: u16,
+    /// Preview pane configuration.
+    #[serde(default)]
+    pub preview: PickerPreview,
 }
 
 impl Default for Picker {
     fn default() -> Self {
         Picker {
-            preview_width: 40,
+            preview: PickerPreview::default(),
+        }
+    }
+}
+
+/// Preview pane settings within the picker.
+#[derive(Debug, Deserialize)]
+pub struct PickerPreview {
+    /// Width as a percentage of terminal width (0-80).
+    /// Set to 0 to disable the preview pane entirely. Default: 40.
+    #[serde(default = "def_preview_width")]
+    pub width: u16,
+    /// Minimum terminal width (columns) to show the preview pane.
+    /// Below this the preview is hidden automatically. Default: 80.
+    #[serde(default = "def_preview_min")]
+    pub min: u16,
+}
+
+impl Default for PickerPreview {
+    fn default() -> Self {
+        PickerPreview {
+            width: def_preview_width(),
+            min: def_preview_min(),
         }
     }
 }
 
 fn def_preview_width() -> u16 {
     40
+}
+
+fn def_preview_min() -> u16 {
+    80
 }
 
 #[derive(Debug, Default, Deserialize)]
