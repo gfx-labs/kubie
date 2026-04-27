@@ -52,12 +52,40 @@ pub fn exec(
     exit_early: bool,
     context_headers_flag: Option<ContextHeaderBehavior>,
     args: Vec<String>,
+    #[cfg(feature = "remote")] no_sync: bool,
+    #[cfg(feature = "remote")] local: bool,
 ) -> Result<()> {
     if args.is_empty() {
         return Ok(());
     }
 
+    // If providers are configured, ensure their kubeconfigs are available.
+    #[cfg(feature = "remote")]
+    let extra_kubeconfigs = {
+        if !local && !settings.providers.entries.is_empty() {
+            get_provider_kubeconfig_paths(settings, no_sync)
+        } else {
+            Vec::new()
+        }
+    };
+
+    #[cfg(feature = "remote")]
+    let installed = if !extra_kubeconfigs.is_empty() {
+        let mut all_paths: Vec<String> = Vec::new();
+        for p in extra_kubeconfigs {
+            all_paths.push(p.to_string_lossy().to_string());
+        }
+        for p in settings.get_kube_configs_paths()? {
+            all_paths.push(p.to_string_lossy().to_string());
+        }
+        kubeconfig::get_kubeconfigs_contexts(&all_paths)?
+    } else {
+        kubeconfig::get_installed_contexts(settings)?
+    };
+
+    #[cfg(not(feature = "remote"))]
     let installed = kubeconfig::get_installed_contexts(settings)?;
+
     let matching = installed.get_contexts_matching(&context_name, settings.behavior.allow_multiple_context_patterns);
 
     if matching.is_empty() {
@@ -85,4 +113,37 @@ pub fn exec(
     }
 
     std::process::exit(0);
+}
+
+/// Get kubeconfig paths from providers (hydrated on demand).
+#[cfg(feature = "remote")]
+fn get_provider_kubeconfig_paths(
+    settings: &Settings,
+    no_sync: bool,
+) -> Vec<std::path::PathBuf> {
+    use crate::providers;
+
+    let prov = providers::config::build_providers(&settings.providers, None);
+    if prov.is_empty() {
+        return Vec::new();
+    }
+
+    let clusters = if no_sync {
+        providers::remote::cache::load_metadata().ok().flatten().unwrap_or_default()
+    } else {
+        match providers::remote::cache::load_metadata().ok().flatten() {
+            Some(c) if !c.is_empty() => {
+                let fresh = providers::remote::sync::fetch_all_clusters(&prov);
+                if fresh.is_empty() {
+                    c
+                } else {
+                    let _ = providers::remote::cache::save_metadata(&fresh);
+                    fresh
+                }
+            }
+            _ => providers::remote::sync::full_sync(&prov).unwrap_or_default(),
+        }
+    };
+
+    providers::remote::sync::hydrate_all_configs(&clusters, &prov)
 }

@@ -247,7 +247,7 @@ impl Installed {
     }
 }
 
-fn load_kubeconfigs<I, P>(kubeconfigs: I) -> Result<Installed>
+pub fn load_kubeconfigs<I, P>(kubeconfigs: I) -> Result<Installed>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,

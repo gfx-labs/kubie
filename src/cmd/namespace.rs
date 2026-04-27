@@ -49,7 +49,7 @@ pub fn namespace(
                     match ns_partial_matches.len() {
                         0 => return Err(anyhow!("'{}' is not a valid namespace for the context", s)),
                         1 => Some(ns_partial_matches[0].clone()),
-                        _ => match select_or_list_namespace(&settings.fzf, Some(ns_partial_matches))? {
+                        _ => match select_or_list_namespace(settings, Some(ns_partial_matches))? {
                             SelectResult::Selected(s) => Some(s),
                             _ => return Ok(()),
                         },
@@ -57,7 +57,7 @@ pub fn namespace(
                 }
             }
         },
-        None => match select_or_list_namespace(&settings.fzf, None)? {
+        None => match select_or_list_namespace(settings, None)? {
             SelectResult::Selected(s) => Some(s),
             _ => return Ok(()),
         },

@@ -21,11 +21,9 @@ fn enter_context(
 
     let kubeconfig = if context_name == "-" {
         if let Some(previous) = session.get_last_context() {
-            // Inside a kubie shell: switch to the previous context from session history
             let ns = namespace_name.or(previous.namespace.as_deref());
             installed.make_kubeconfig_for_context(&previous.context, ns)?
         } else if let Some(ref last) = state.last_context {
-            // Outside a kubie shell: fall back to the last globally-used context
             let ns = namespace_name.or_else(|| state.namespace_history.get(last).and_then(|s| s.as_deref()));
             installed.make_kubeconfig_for_context(last, ns)?
         } else {
@@ -67,7 +65,17 @@ pub fn context(
     namespace_name: Option<String>,
     kubeconfigs: Vec<String>,
     recursive: bool,
+    #[cfg(feature = "remote")] no_sync: bool,
+    #[cfg(feature = "remote")] local: bool,
 ) -> Result<()> {
+    // If providers are configured and no explicit kubeconfigs given, use the provider-aware picker.
+    #[cfg(feature = "remote")]
+    {
+        if !local && !settings.providers.entries.is_empty() && kubeconfigs.is_empty() && context_name.is_none() {
+            return context_with_providers(settings, namespace_name, recursive, no_sync);
+        }
+    }
+
     let mut installed = if kubeconfigs.is_empty() {
         kubeconfig::get_installed_contexts(settings)?
     } else {
@@ -76,11 +84,99 @@ pub fn context(
 
     let context_name = match context_name {
         Some(context_name) => context_name,
-        None => match select_or_list_context(&settings.fzf, &mut installed)? {
+        None => match select_or_list_context(settings, &mut installed)? {
             SelectResult::Selected(x) => x,
             _ => return Ok(()),
         },
     };
 
+    // When providers are enabled and a context name was given explicitly, check if it's a provider context.
+    #[cfg(feature = "remote")]
+    if !local && !settings.providers.entries.is_empty() {
+        if try_provider_context(settings, &context_name, namespace_name.as_deref(), recursive, no_sync)?.is_some() {
+            return Ok(());
+        }
+    }
+
     enter_context(settings, installed, &context_name, namespace_name.as_deref(), recursive)
+}
+
+/// Handle context switching through the provider-aware picker.
+#[cfg(feature = "remote")]
+fn context_with_providers(
+    settings: &Settings,
+    namespace_name: Option<String>,
+    recursive: bool,
+    no_sync: bool,
+) -> Result<()> {
+    use crate::providers;
+
+    let result = match providers::remote::picker::pick_context(settings, &settings.providers, no_sync)? {
+        Some(r) => r,
+        None => return Ok(()),
+    };
+
+    let ctx_name = &result.context_name;
+    let clusters = &result.clusters;
+
+    // Check if this is a provider-discovered context.
+    if let Some(cluster) = providers::remote::cache::find_cluster_for_context(ctx_name, clusters) {
+        let prov = providers::config::build_providers(&settings.providers, None);
+        providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
+
+        let config_file = providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
+        providers::remote::sync::spawn_delayed_delete(&config_file);
+
+        let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
+        let normal_paths = settings.get_kube_configs_paths()?;
+        for p in normal_paths {
+            kubeconfigs.push(p.to_string_lossy().to_string());
+        }
+
+        let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
+        return enter_context(settings, installed, ctx_name, namespace_name.as_deref(), recursive);
+    }
+
+    // It's a local kubeconfig context.
+    let installed = kubeconfig::get_installed_contexts(settings)?;
+    enter_context(settings, installed, ctx_name, namespace_name.as_deref(), recursive)
+}
+
+/// Try to handle a named context as a provider-discovered context.
+/// Returns Ok(Some(())) if handled, Ok(None) if not a provider context.
+#[cfg(feature = "remote")]
+fn try_provider_context(
+    settings: &Settings,
+    context_name: &str,
+    namespace_name: Option<&str>,
+    recursive: bool,
+    no_sync: bool,
+) -> Result<Option<()>> {
+    use crate::providers;
+
+    let prov = providers::config::build_providers(&settings.providers, None);
+
+    let mut clusters = providers::remote::cache::load_metadata()?.unwrap_or_default();
+    if providers::remote::cache::find_cluster_for_context(context_name, &clusters).is_none() && !no_sync && !prov.is_empty() {
+        clusters = providers::remote::sync::full_sync(&prov)?;
+    }
+
+    if let Some(cluster) = providers::remote::cache::find_cluster_for_context(context_name, &clusters) {
+        providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
+
+        let config_file = providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
+        providers::remote::sync::spawn_delayed_delete(&config_file);
+
+        let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
+        let normal_paths = settings.get_kube_configs_paths()?;
+        for p in normal_paths {
+            kubeconfigs.push(p.to_string_lossy().to_string());
+        }
+
+        let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
+        enter_context(settings, installed, context_name, namespace_name, recursive)?;
+        return Ok(Some(()));
+    }
+
+    Ok(None)
 }

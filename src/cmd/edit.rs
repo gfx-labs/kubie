@@ -63,7 +63,7 @@ pub fn edit_context(settings: &Settings, context_name: Option<String>) -> Result
 
     let context_name = match context_name {
         Some(context_name) => context_name,
-        None => match select_or_list_context(&settings.fzf, &mut installed)? {
+        None => match select_or_list_context(settings, &mut installed)? {
             SelectResult::Selected(x) => x,
             _ => return Ok(()),
         },

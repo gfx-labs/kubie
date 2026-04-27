@@ -4,19 +4,24 @@ use clap::Parser;
 use cmd::meta::Kubie;
 use settings::Settings;
 
+mod providers;
 mod cmd;
+mod frecency;
 mod ioutil;
 mod kubeconfig;
 mod kubectl;
+mod picker;
 mod session;
 mod settings;
 mod shell;
-mod skim;
 mod state;
 mod vars;
 
 fn main() -> Result<()> {
     let settings = Settings::load()?;
+
+    #[cfg(feature = "remote")]
+    providers::remote::cache::init();
 
     let kubie = Kubie::parse();
 
@@ -26,6 +31,10 @@ fn main() -> Result<()> {
             context_name,
             kubeconfigs,
             recursive,
+            #[cfg(feature = "remote")]
+            no_sync,
+            #[cfg(feature = "remote")]
+            local,
         } => {
             cmd::context::context(
                 &settings,
@@ -33,6 +42,10 @@ fn main() -> Result<()> {
                 namespace_name,
                 kubeconfigs,
                 recursive,
+                #[cfg(feature = "remote")]
+                no_sync,
+                #[cfg(feature = "remote")]
+                local,
             )?;
         }
         Kubie::Namespace {
@@ -51,6 +64,10 @@ fn main() -> Result<()> {
             exit_early,
             context_headers_flag,
             args,
+            #[cfg(feature = "remote")]
+            no_sync,
+            #[cfg(feature = "remote")]
+            local,
         } => {
             cmd::exec::exec(
                 &settings,
@@ -59,6 +76,10 @@ fn main() -> Result<()> {
                 exit_early,
                 context_headers_flag,
                 args,
+                #[cfg(feature = "remote")]
+                no_sync,
+                #[cfg(feature = "remote")]
+                local,
             )?;
         }
         Kubie::Lint => {
@@ -80,8 +101,20 @@ fn main() -> Result<()> {
         Kubie::Export {
             context_name,
             namespace_name,
+            #[cfg(feature = "remote")]
+            no_sync,
+            #[cfg(feature = "remote")]
+            local,
         } => {
-            cmd::export::export(&settings, context_name, namespace_name)?;
+            cmd::export::export(
+                &settings,
+                context_name,
+                namespace_name,
+                #[cfg(feature = "remote")]
+                no_sync,
+                #[cfg(feature = "remote")]
+                local,
+            )?;
         }
         Kubie::GenerateCompletion(cmd) => {
             cmd::meta::generate_completion(cmd);

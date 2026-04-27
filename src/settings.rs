@@ -29,8 +29,12 @@ pub fn expanduser(path: &str) -> String {
     }
 }
 
+/// Legacy fzf settings. Kept for config file compatibility but no longer used
+/// by the new TUI picker.
+#[allow(dead_code)]
 #[derive(Default, Debug, Deserialize)]
 pub struct Fzf {
+    #[allow(dead_code)]
     #[serde(default = "def_bool_true")]
     pub mouse: bool,
     #[serde(default)]
@@ -47,6 +51,30 @@ pub struct Fzf {
     pub color: Option<String>,
 }
 
+/// TUI picker settings.
+#[derive(Debug, Deserialize)]
+pub struct Picker {
+    /// Show the preview pane on the right side. Default: true.
+    #[serde(default = "def_bool_true")]
+    pub preview: bool,
+    /// Width of the preview pane as a percentage of the terminal width (1-80). Default: 50.
+    #[serde(default = "def_preview_width")]
+    pub preview_width: u16,
+}
+
+impl Default for Picker {
+    fn default() -> Self {
+        Picker {
+            preview: true,
+            preview_width: 50,
+        }
+    }
+}
+
+fn def_preview_width() -> u16 {
+    50
+}
+
 #[derive(Debug, Default, Deserialize)]
 pub struct Settings {
     #[serde(default)]
@@ -61,8 +89,15 @@ pub struct Settings {
     pub behavior: Behavior,
     #[serde(default)]
     pub hooks: Hooks,
+    #[allow(dead_code)]
     #[serde(default)]
     pub fzf: Fzf,
+    /// TUI picker configuration.
+    #[serde(default)]
+    pub picker: Picker,
+    /// Provider configuration for discovering clusters and kubeconfigs.
+    #[serde(default)]
+    pub providers: crate::providers::config::ProvidersConfig,
 }
 
 impl Settings {
@@ -83,7 +118,37 @@ impl Settings {
         };
 
         // Very important to exclude kubie's own config file ~/.kube/kubie.yaml from the results.
-        settings.configs.exclude.push(settings_path_str);
+        settings.configs.exclude.push(settings_path_str.clone());
+
+        // Backwards compatibility: if no kubeconfig provider is explicitly configured,
+        // auto-inject one from the legacy `configs:` section.
+        let has_kubeconfig_provider = settings
+            .providers
+            .entries
+            .values()
+            .any(|e| e.provider_type == "kubeconfig");
+
+        if !has_kubeconfig_provider {
+            use crate::providers::config::ProviderEntry;
+
+            let config_value = serde_yaml::to_value(
+                &crate::providers::kubeconfig::KubeConfigProviderConfig {
+                    include: settings.configs.include.clone(),
+                    exclude: settings.configs.exclude.clone(),
+                },
+            )
+            .unwrap_or_default();
+
+            settings.providers.entries.insert(
+                "kubeconfig".to_string(),
+                ProviderEntry {
+                    provider_type: "kubeconfig".to_string(),
+                    enabled: true,
+                    config: config_value,
+                },
+            );
+        }
+
         Ok(settings)
     }
 

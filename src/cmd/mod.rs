@@ -1,10 +1,11 @@
 use std::io::{self, IsTerminal};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 
 use crate::kubeconfig::Installed;
 use crate::kubectl;
-use crate::settings::Fzf;
+use crate::picker::{self, PickerItem};
+use crate::settings::Settings;
 
 pub mod context;
 pub mod delete;
@@ -24,25 +25,49 @@ pub enum SelectResult {
     Selected(String),
 }
 
-pub fn select_or_list_context(fzf: &Fzf, installed: &mut Installed) -> Result<SelectResult> {
+pub fn select_or_list_context(settings: &Settings, installed: &mut Installed) -> Result<SelectResult> {
     installed.contexts.sort_by(|a, b| a.item.name.cmp(&b.item.name));
-    let mut context_names: Vec<_> = installed.contexts.iter().map(|c| c.item.name.clone()).collect();
 
-    if context_names.is_empty() {
+    if installed.contexts.is_empty() {
         bail!("No contexts found");
     }
-    if context_names.len() == 1 {
-        return Ok(SelectResult::Selected(context_names[0].clone()));
+    if installed.contexts.len() == 1 {
+        return Ok(SelectResult::Selected(installed.contexts[0].item.name.clone()));
     }
 
     if io::stdout().is_terminal() {
-        // NOTE: skim shows the list of context names in reverse order
-        context_names.reverse();
-        match crate::skim::select(fzf, context_names)? {
+        let items: Vec<PickerItem> = installed
+            .contexts
+            .iter()
+            .map(|ctx| {
+                let cluster_name = &ctx.item.context.cluster;
+                let server = installed
+                    .find_cluster_by_name(cluster_name, &ctx.source)
+                    .and_then(|c| {
+                        c.item
+                            .cluster
+                            .get("server")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .unwrap_or_default();
+
+                picker::local_context_item(
+                    &ctx.item.name,
+                    cluster_name,
+                    &server,
+                    ctx.item.context.namespace.as_deref(),
+                    &ctx.source,
+                )
+            })
+            .collect();
+
+        match picker::pick(items, None, &settings.picker)? {
             Some(name) => Ok(SelectResult::Selected(name)),
             None => Ok(SelectResult::Cancelled),
         }
     } else {
+        let context_names: Vec<_> = installed.contexts.iter().map(|c| c.item.name.clone()).collect();
         for c in context_names {
             println!("{c}");
         }
@@ -50,10 +75,10 @@ pub fn select_or_list_context(fzf: &Fzf, installed: &mut Installed) -> Result<Se
     }
 }
 
-pub fn select_or_list_namespace(fzf: &Fzf, namespaces: Option<Vec<String>>) -> Result<SelectResult> {
+pub fn select_or_list_namespace(settings: &Settings, namespaces: Option<Vec<String>>) -> Result<SelectResult> {
     let mut namespaces = match namespaces {
         Some(ns) => ns,
-        None => kubectl::get_namespaces(None).context("Could not get namespaces")?,
+        None => kubectl::get_namespaces(None)?,
     };
 
     namespaces.sort();
@@ -63,9 +88,12 @@ pub fn select_or_list_namespace(fzf: &Fzf, namespaces: Option<Vec<String>>) -> R
     }
 
     if io::stdout().is_terminal() {
-        // NOTE: skim shows the list of namespaces in reverse order
-        namespaces.reverse();
-        match crate::skim::select(fzf, namespaces)? {
+        let items: Vec<PickerItem> = namespaces
+            .iter()
+            .map(|ns| picker::simple_item(ns))
+            .collect();
+
+        match picker::pick(items, None, &settings.picker)? {
             Some(name) => Ok(SelectResult::Selected(name)),
             None => Ok(SelectResult::Cancelled),
         }

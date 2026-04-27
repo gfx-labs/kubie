@@ -24,6 +24,16 @@ pub enum Kubie {
 
         /// Name of the context to enter. Use '-' to switch back to the previous context.
         context_name: Option<String>,
+
+        /// Skip background cloud provider sync, using cached metadata only.
+        #[cfg(feature = "remote")]
+        #[clap(long = "no-sync")]
+        no_sync: bool,
+
+        /// Skip all remote providers, only show local kubeconfig contexts.
+        #[cfg(feature = "remote")]
+        #[clap(long = "local")]
+        local: bool,
     },
 
     /// Change the namespace in which the current shell operates. The namespace change does
@@ -62,6 +72,16 @@ pub enum Kubie {
         context_headers_flag: Option<ContextHeaderBehavior>,
         /// Command to run as well as its arguments.
         args: Vec<String>,
+
+        /// Skip background cloud provider sync, using cached metadata only.
+        #[cfg(feature = "remote")]
+        #[clap(long = "no-sync")]
+        no_sync: bool,
+
+        /// Skip all remote providers, only use local kubeconfig contexts.
+        #[cfg(feature = "remote")]
+        #[clap(long = "local")]
+        local: bool,
     },
 
     /// Prints the path to an isolated configuration file for a context and namespace.
@@ -71,6 +91,16 @@ pub enum Kubie {
         context_name: String,
         /// Name of the namespace in the context. This is mandatory to avoid potential errors.
         namespace_name: String,
+
+        /// Skip background cloud provider sync, using cached metadata only.
+        #[cfg(feature = "remote")]
+        #[clap(long = "no-sync")]
+        no_sync: bool,
+
+        /// Skip all remote providers, only use local kubeconfig contexts.
+        #[cfg(feature = "remote")]
+        #[clap(long = "local")]
+        local: bool,
     },
 
     /// Check the Kubernetes config files for issues.
