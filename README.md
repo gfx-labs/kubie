@@ -119,8 +119,11 @@ shell: bash
 default_editor: vim
 
 # Configure where to look for kubernetes config files.
+# This is the legacy config format. If you define a "kubeconfig" provider
+# under the `providers:` section below, that takes precedence and this
+# section is ignored. If no kubeconfig provider is defined, kubie
+# auto-creates one from these paths for backwards compatibility.
 configs:
-
     # Include these globs.
     # Default: values listed below.
     include:
@@ -133,15 +136,71 @@ configs:
         - ~/.kube/kubie/*.yaml
 
     # Exclude these globs.
-    # Default: values listed below.
+    # Default: empty list.
     # Note: kubie's own config file is always excluded.
     exclude:
         - ~/.kube/kubie.yaml
 
+# Providers: unified context sources.
+# Each entry is a named provider that discovers kubernetes contexts.
+# The "kubeconfig" type reads local files; other types discover clusters
+# from remote APIs and fetch kubeconfigs on demand.
+#
+# Secret fields (like tokens) support expansion:
+#   ${VAR}             - environment variable
+#   ${VAR:-default}    - environment variable with default
+#   $(command args...) - command substitution (stdout, trimmed)
+#
+# Expansion is lazy -- commands only run when the value is first needed,
+# not at config load time. This keeps startup instant.
+providers:
+    # Local kubeconfig files. Equivalent to the legacy `configs:` section.
+    local:
+        type: kubeconfig
+        config:
+            include:
+                - ~/.kube/config
+                - ~/.kube/static-kubeconfigs/*.yaml
+            exclude: []
+
+    # DigitalOcean: discovers DOKS clusters via the DO API.
+    # do-prod:
+    #     type: digitalocean
+    #     config:
+    #         token: $(doctl auth token)
+
+    # Rancher: discovers clusters via the Rancher v3 API.
+    # my-rancher:
+    #     type: rancher
+    #     config:
+    #         url: https://rancher.example.com
+    #         token: $(vault kv get -field=token secret/rancher)
+
+    # GKE: discovers clusters via the Google Cloud API.
+    # my-gke:
+    #     type: gke
+    #     config:
+    #         project: my-gcp-project
+    #         token: $(gcloud auth print-access-token)
+
+# TUI picker settings.
+picker:
+    preview:
+        # Width of the preview pane as a percentage of terminal width (0-80).
+        # Set to 0 to disable the preview pane entirely.
+        # Default: 40
+        width: 40
+
+        # Minimum terminal width (columns) to show the preview pane.
+        # On narrow terminals the preview is hidden automatically.
+        # Default: 80
+        min: 80
+
 # Prompt settings.
 prompt:
     # Disable kubie's custom prompt inside of a kubie shell. This is useful
-    # when you already have a prompt displaying kubernetes information.
+    # when you already have a prompt displaying kubernetes information
+    # (e.g. via powerlevel10k's kubecontext segment).
     # Default: false
     disable: false
 
@@ -163,23 +222,22 @@ prompt:
 
 # Behavior
 behavior:
-    # Namespace validation and switching behavior.  Set to "false" if you do not have
-    # the right to list namespaces.
+    # Namespace validation and switching behavior. Set to "false" if you do not
+    # have the right to list namespaces.
     # Valid values:
     #   true:    Make sure the namespace exists with `kubectl get namespaces`.
     #   false:   Switch namespaces without validation.
     #   partial: Check for partial matches when running `kubie ns <namespace>`
     #            and no exact match is found:
-    #              - if exactly one namespace partially matches, switch to that namespace
+    #              - if exactly one namespace partially matches, switch to that
     #              - if multiple namespaces partially match, select from those
     # Default: true
     validate_namespaces: true
 
-    # Enable or disable the printing of the 'CONTEXT => ...' headers when running
-    # `kubie exec`.
+    # Enable or disable the printing of the 'CONTEXT => ...' headers when
+    # running `kubie exec`.
     # Valid values:
-    #   auto:   Prints context headers only if stdout is a TTY. Piping/redirecting
-    #           kubie output will auto-disable context headers.
+    #   auto:   Prints context headers only if stdout is a TTY.
     #   always: Always prints context headers, even if stdout is not a TTY.
     #   never:  Never prints context headers.
     # Default: auto
@@ -194,57 +252,30 @@ behavior:
 
 # Optional start and stop hooks
 hooks:
-    # A command hook to run when a CTX is started.  
-    # This example re-labels your terminal window
+    # A command hook to run when a CTX is started.
+    # This example re-labels your terminal window.
     # Default: none
     start_ctx: >
         echo -en "\033]1; `kubie info ctx`|`kubie info ns` \007"
 
-    # A command hook to run when a CTX is stopped
-    # This example sets the terminal back to the shell name
+    # A command hook to run when a CTX is stopped.
+    # This example sets the terminal back to the shell name.
     # Default: none
     stop_ctx: >
         echo -en "\033]1; $SHELL \007"
-
-# Customize drop-down skim menu display options.
-# Kubie uses skim as fzf-compatible Rust library for interactive menus.
-fzf:
-    # Enable mouse support in the selectable menu.
-    # Default: true
-    mouse: true
-
-    # Reverse the layout of the menu (show prompt at top).
-    # Default: false
-    reverse: false
-
-    # Enable case-insensitive search.
-    # Default: false
-    ignore_case: false
-
-    # Hide the info line (match count).
-    # Default: false
-    info_hidden: false
-
-    # Set the height of the menu. Can be a percentage (e.g., "50%") or a fixed
-    # number of rows (e.g., "20").
-    # Default: unset (uses full screen)
-    height: "50%"
-
-    # Customize the prompt string.
-    # Default: unset
-    prompt: "> "
-
-    # Set a color scheme. See skim documentation for color format.
-    # See more option in skim docs: https://github.com/skim-rs/skim?tab=readme-ov-file#color-scheme
-    # Default: unset
-    color: "dark"
 ```
+
+> **Note:** The `fzf:` config section from upstream kubie is no longer used. The TUI picker
+> in this fork has its own settings under `picker:`.
 
 ## For distro maintainers
 Since `0.19.0`, the self update functionality is behind a feature. You can use `cargo build --release --no-default-features`
-to produce a binary without the self update functionality. It's probably better if people rely on the distro's package
-manager for updates over this functionality. The binary produced is also quite smaller since it has fewer dependencies.
+to produce a binary without the self update functionality. The `remote` feature (for cloud provider discovery) can also
+be disabled independently. A minimal build without either:
+```
+cargo build --release --no-default-features
+```
 
 ## Future plans
-* Integration with vault to automatically download k8s configs from a vault server
+* Additional provider backends (EKS, AKS, etc.)
 * Import/edit configs

@@ -28,8 +28,10 @@ pub struct PickerItem {
     pub value: String,
     /// Display text shown in the list (may differ from value).
     pub display: String,
-    /// Source/group label for tab filtering (e.g. "kubeconfig", "digitalocean").
+    /// Source/group label for tab filtering and display tag (e.g. "do-prod", "my-rancher", "kubeconfig").
     pub source: String,
+    /// Provider type used for color mapping (e.g. "digitalocean", "gke", "rancher", "kubeconfig").
+    pub provider_type: String,
     /// Preview lines shown in the right pane when this item is highlighted.
     pub preview: Vec<PreviewLine>,
 }
@@ -49,8 +51,40 @@ pub struct PreviewLine {
 struct FilteredEntry {
     /// Index into `items`.
     item_idx: usize,
-    /// Character positions in the display string that matched the query.
+    /// Character positions in the display (cluster name) that matched the query.
     match_positions: Vec<u32>,
+}
+
+/// Parse the query into an optional `@source` filter and the remaining name query.
+/// Examples:
+///   "prod"      -> (None, "prod")
+///   "@do"       -> (Some("do"), "")
+///   "@do prod"  -> (Some("do"), "prod")
+///   "@gke test" -> (Some("gke"), "test")
+fn parse_query(query: &str) -> (Option<&str>, &str) {
+    let trimmed = query.trim_start();
+    if let Some(rest) = trimmed.strip_prefix('@') {
+        // Split at the first space after the @token.
+        if let Some(space_idx) = rest.find(' ') {
+            let source_query = rest[..space_idx].trim();
+            let name_query = rest[space_idx + 1..].trim_start();
+            if source_query.is_empty() {
+                (None, name_query)
+            } else {
+                (Some(source_query), name_query)
+            }
+        } else {
+            // Just "@something" with no space -- entire thing is source filter.
+            let source_query = rest.trim();
+            if source_query.is_empty() {
+                (None, "")
+            } else {
+                (Some(source_query), "")
+            }
+        }
+    } else {
+        (None, trimmed)
+    }
 }
 
 struct PickerState {
@@ -139,7 +173,13 @@ impl PickerState {
             self.tabs.get(self.active_tab).map(|s| s.as_str())
         };
 
-        if self.query.is_empty() {
+        let (source_query, name_query) = parse_query(&self.query);
+
+        let has_name_query = !name_query.is_empty();
+        let has_source_query = source_query.is_some();
+
+        if !has_name_query && !has_source_query {
+            // No query at all -- show everything filtered by tab, sorted by frecency.
             let mut indices: Vec<usize> = (0..self.items.len())
                 .filter(|&i| tab_filter.is_none() || self.items[i].source == tab_filter.unwrap())
                 .collect();
@@ -150,15 +190,20 @@ impl PickerState {
             });
             self.filtered = indices
                 .into_iter()
-                .map(|i| FilteredEntry { item_idx: i, match_positions: Vec::new() })
+                .map(|i| FilteredEntry {
+                    item_idx: i,
+                    match_positions: Vec::new(),
+                })
                 .collect();
         } else {
-            let pattern = Pattern::new(
-                &self.query,
-                CaseMatching::Ignore,
-                Normalization::Smart,
-                AtomKind::Fuzzy,
-            );
+            let name_pattern = if has_name_query {
+                Some(Pattern::new(name_query, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy))
+            } else {
+                None
+            };
+            let source_pattern = source_query.map(|sq| {
+                Pattern::new(sq, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy)
+            });
 
             let mut scored: Vec<(usize, u32, Vec<u32>)> = self
                 .items
@@ -166,27 +211,40 @@ impl PickerState {
                 .enumerate()
                 .filter(|(_, item)| tab_filter.is_none() || item.source == tab_filter.unwrap())
                 .filter_map(|(i, item)| {
-                    let haystack = format!("{} {} {}", item.source, item.display, item.value);
-                    let mut buf = Vec::new();
-                    let hay = nucleo_matcher::Utf32Str::new(&haystack, &mut buf);
-                    let score = pattern.score(hay, matcher)?;
+                    let mut total_score: u32 = 0;
 
-                    // Get match indices against the display name for highlighting.
-                    let mut indices = Vec::new();
-                    let mut dbuf = Vec::new();
-                    let display_hay = nucleo_matcher::Utf32Str::new(&item.display, &mut dbuf);
-                    pattern.indices(display_hay, matcher, &mut indices);
-                    indices.sort_unstable();
-                    indices.dedup();
+                    // Source filtering (if @query provided). Must match to be included.
+                    if let Some(ref sp) = source_pattern {
+                        let mut buf = Vec::new();
+                        let hay = nucleo_matcher::Utf32Str::new(&item.source, &mut buf);
+                        let score = sp.score(hay, matcher)?;
+                        total_score += score as u32;
+                    }
 
-                    Some((i, score as u32, indices))
+                    // Name matching (default: fuzzy against display name).
+                    let mut name_positions = Vec::new();
+                    if let Some(ref np) = name_pattern {
+                        let mut buf = Vec::new();
+                        let hay = nucleo_matcher::Utf32Str::new(&item.display, &mut buf);
+                        let score = np.score(hay, matcher)?;
+                        total_score += score as u32;
+
+                        np.indices(hay, matcher, &mut name_positions);
+                        name_positions.sort_unstable();
+                        name_positions.dedup();
+                    }
+
+                    Some((i, total_score, name_positions))
                 })
                 .collect();
 
             scored.sort_by(|a, b| b.1.cmp(&a.1));
             self.filtered = scored
                 .into_iter()
-                .map(|(i, _, positions)| FilteredEntry { item_idx: i, match_positions: positions })
+                .map(|(i, _, name_pos)| FilteredEntry {
+                    item_idx: i,
+                    match_positions: name_pos,
+                })
                 .collect();
         }
 
@@ -356,17 +414,8 @@ fn render_list(frame: &mut Frame, state: &mut PickerState, area: Rect) {
             let item = &state.items[entry.item_idx];
             let is_selected = vi + state.scroll_offset == state.selected;
 
-            let source_clr = source_color(&item.source);
-            let tag = if item.source.is_empty() {
-                String::new()
-            } else {
-                format!("[{}]", item.source)
-            };
-            let padding = if tag.is_empty() {
-                String::new()
-            } else {
-                " ".repeat(16_usize.saturating_sub(tag.len()))
-            };
+            let source_clr = source_color(&item.provider_type);
+            let has_source = !item.source.is_empty();
 
             // Build display name spans with match highlighting.
             let name_spans = build_highlighted_spans(
@@ -383,7 +432,9 @@ fn render_list(frame: &mut Frame, state: &mut PickerState, area: Rect) {
                 spans.push(Span::raw("  "));
             }
             // Source tag.
-            if !tag.is_empty() {
+            if has_source {
+                let tag = format!("[{}]", item.source);
+                let padding = " ".repeat(16_usize.saturating_sub(tag.len()));
                 spans.push(Span::styled(tag, Style::default().fg(source_clr)));
                 spans.push(Span::raw(padding));
             }
@@ -436,6 +487,8 @@ fn build_highlighted_spans<'a>(display: &'a str, positions: &[u32], is_selected:
 
     spans
 }
+
+
 
 fn render_preview(frame: &mut Frame, state: &PickerState, area: Rect) {
     // Use a thin left-side separator instead of a full border box.
@@ -616,6 +669,7 @@ pub fn simple_item(name: &str) -> PickerItem {
         value: name.to_string(),
         display: name.to_string(),
         source: String::new(),
+        provider_type: String::new(),
         preview: Vec::new(),
     }
 }
@@ -645,6 +699,7 @@ pub fn local_context_item(
         value: context_name.to_string(),
         display: context_name.to_string(),
         source: "kubeconfig".to_string(),
+        provider_type: "kubeconfig".to_string(),
         preview,
     }
 }
@@ -664,7 +719,8 @@ pub fn provider_context_item(cluster: &crate::providers::ClusterInfo) -> PickerI
     PickerItem {
         value: cluster.context_name.clone(),
         display: cluster.name.clone(),
-        source: cluster.provider.clone(),
+        source: cluster.account.clone(),
+        provider_type: cluster.provider.clone(),
         preview,
     }
 }
