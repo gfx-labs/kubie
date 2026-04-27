@@ -54,10 +54,8 @@ pub struct Fzf {
 /// TUI picker settings.
 #[derive(Debug, Deserialize)]
 pub struct Picker {
-    /// Show the preview pane on the right side. Default: true.
-    #[serde(default = "def_bool_true")]
-    pub preview: bool,
-    /// Width of the preview pane as a percentage of the terminal width (1-80). Default: 50.
+    /// Width of the preview pane as a percentage of the terminal width (0-80).
+    /// Set to 0 to disable the preview pane entirely. Default: 40.
     #[serde(default = "def_preview_width")]
     pub preview_width: u16,
 }
@@ -65,14 +63,13 @@ pub struct Picker {
 impl Default for Picker {
     fn default() -> Self {
         Picker {
-            preview: true,
-            preview_width: 50,
+            preview_width: 40,
         }
     }
 }
 
 fn def_preview_width() -> u16 {
-    50
+    40
 }
 
 #[derive(Debug, Default, Deserialize)]

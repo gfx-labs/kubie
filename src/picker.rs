@@ -66,9 +66,7 @@ struct PickerState {
     scroll_offset: usize,
     /// Channel for receiving new items from background threads.
     rx: Option<mpsc::Receiver<Vec<PickerItem>>>,
-    /// Whether to show the preview pane.
-    show_preview: bool,
-    /// Width of the preview pane as a percentage (1-80).
+    /// Width of the preview pane as a percentage (0 = disabled, 1-80).
     preview_width: u16,
 }
 
@@ -105,8 +103,7 @@ impl PickerState {
             active_tab: 0,
             scroll_offset: 0,
             rx,
-            show_preview: picker_settings.preview,
-            preview_width: picker_settings.preview_width.clamp(1, 80),
+            preview_width: picker_settings.preview_width.min(80),
         }
     }
 
@@ -320,7 +317,7 @@ fn render(frame: &mut Frame, state: &mut PickerState) {
 
     // Main area.
     let main_area = areas[area_idx];
-    let has_preview = state.show_preview
+    let has_preview = state.preview_width > 0
         && state.selected_item().is_some_and(|item| !item.preview.is_empty());
     if has_preview {
         let list_pct = 100 - state.preview_width;
@@ -449,21 +446,21 @@ fn render_preview(frame: &mut Frame, state: &PickerState, area: Rect) {
 
     let label_style = Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD);
     let value_style = Style::default().fg(Color::White);
-    let indent = "                  "; // same width as the label column
 
     let mut lines: Vec<Line> = Vec::new();
     for pline in &item.preview {
-        let label_text = format!("  {:>12}  ", format!("{}:", pline.label.to_lowercase()));
-        // Split value on newlines for multiline support.
+        let label_text = format!(" {:>9} ", format!("{}:", pline.label.to_lowercase()));
+        let indent_width = label_text.len();
         let value_lines: Vec<&str> = pline.value.split('\n').collect();
         if let Some((first, rest)) = value_lines.split_first() {
             lines.push(Line::from(vec![
                 Span::styled(label_text, label_style),
                 Span::styled(*first, value_style),
             ]));
+            let indent = " ".repeat(indent_width);
             for continuation in rest {
                 lines.push(Line::from(vec![
-                    Span::raw(indent),
+                    Span::raw(indent.clone()),
                     Span::styled(*continuation, value_style),
                 ]));
             }
