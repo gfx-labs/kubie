@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::Mutex;
 
 use colored::Colorize;
@@ -111,36 +110,7 @@ pub fn hydrate_all_configs(clusters: &[ClusterInfo], providers: &[NamedProvider]
     paths
 }
 
-/// Spawn a fully detached background process that deletes a file after 5 seconds.
-///
-/// Safety checks:
-/// - Path must be inside the kubie cloud configs directory
-/// - Path must have a `.yaml` extension
-/// - Path must be a regular file (not a symlink, directory, etc.)
-pub fn spawn_delayed_delete(path: &std::path::Path) {
-    let configs_dir = cache::configs_dir();
-
-    let Ok(canonical) = path.canonicalize() else {
-        return;
-    };
-    let Ok(canonical_configs) = configs_dir.canonicalize() else {
-        return;
-    };
-    if !canonical.starts_with(&canonical_configs) {
-        return;
-    }
-    if canonical.extension().and_then(|e| e.to_str()) != Some("yaml") {
-        return;
-    }
-    if !canonical.is_file() || canonical.is_symlink() {
-        return;
-    }
-
-    let canonical_str = canonical.to_string_lossy().to_string();
-    let _ = Command::new("sh")
-        .args(["-c", "sleep 5; rm -f -- \"$1\"", "--", &canonical_str])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
+/// Delete an ephemeral kubeconfig file after it has been consumed.
+pub fn cleanup_config(path: &std::path::Path) {
+    let _ = std::fs::remove_file(path);
 }

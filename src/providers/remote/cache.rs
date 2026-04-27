@@ -26,7 +26,7 @@ static TEMP_DIR: OnceLock<PathBuf> = OnceLock::new();
 /// Initialize cache paths. Must be called once at startup when cloud feature is active.
 ///
 /// - Metadata: `$XDG_CACHE_HOME/kubie/cloud/` (default `~/.cache/kubie/cloud/`)
-/// - Configs:  `/tmp/kubie-cloud-<uid>/configs/`
+/// - Configs:  `/tmp/kubie-providers-<uid>/configs/`
 pub fn init() {
     DATA_DIR.get_or_init(|| {
         let base = if let Ok(dir) = std::env::var("XDG_CACHE_HOME") {

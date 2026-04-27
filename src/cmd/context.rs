@@ -125,7 +125,7 @@ fn context_with_providers(
         providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
 
         let config_file = providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
-        providers::remote::sync::spawn_delayed_delete(&config_file);
+        providers::remote::sync::cleanup_config(&config_file);
 
         let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
         let normal_paths = settings.get_kube_configs_paths()?;
@@ -165,7 +165,7 @@ fn try_provider_context(
         providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
 
         let config_file = providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
-        providers::remote::sync::spawn_delayed_delete(&config_file);
+        providers::remote::sync::cleanup_config(&config_file);
 
         let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
         let normal_paths = settings.get_kube_configs_paths()?;

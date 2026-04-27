@@ -1,4 +1,6 @@
 use std::io::{self, IsTerminal};
+use std::sync::mpsc;
+use std::thread;
 
 use anyhow::{bail, Result};
 
@@ -76,31 +78,52 @@ pub fn select_or_list_context(settings: &Settings, installed: &mut Installed) ->
 }
 
 pub fn select_or_list_namespace(settings: &Settings, namespaces: Option<Vec<String>>) -> Result<SelectResult> {
-    let mut namespaces = match namespaces {
-        Some(ns) => ns,
-        None => kubectl::get_namespaces(None)?,
-    };
-
-    namespaces.sort();
-
-    if namespaces.is_empty() {
-        bail!("No namespaces found");
-    }
-
-    if io::stdout().is_terminal() {
-        let items: Vec<PickerItem> = namespaces
-            .iter()
-            .map(|ns| picker::simple_item(ns))
-            .collect();
-
-        match picker::pick(items, None, &settings.picker)? {
-            Some(name) => Ok(SelectResult::Selected(name)),
-            None => Ok(SelectResult::Cancelled),
+    if !io::stdout().is_terminal() {
+        // Non-interactive: fetch and print.
+        let mut namespaces = match namespaces {
+            Some(ns) => ns,
+            None => kubectl::get_namespaces(None)?,
+        };
+        namespaces.sort();
+        if namespaces.is_empty() {
+            bail!("No namespaces found");
         }
-    } else {
         for n in namespaces {
             println!("{n}");
         }
-        Ok(SelectResult::Listed)
+        return Ok(SelectResult::Listed);
+    }
+
+    // Interactive: show the picker immediately and load namespaces in the background.
+    match namespaces {
+        Some(mut ns) => {
+            // Already have namespaces (e.g. partial match list) -- show immediately.
+            ns.sort();
+            if ns.is_empty() {
+                bail!("No namespaces found");
+            }
+            let items: Vec<PickerItem> = ns.iter().map(|n| picker::simple_item(n)).collect();
+            match picker::pick(items, None, &settings.picker)? {
+                Some(name) => Ok(SelectResult::Selected(name)),
+                None => Ok(SelectResult::Cancelled),
+            }
+        }
+        None => {
+            // No namespaces yet -- open picker immediately, fetch in background.
+            let (tx, rx) = mpsc::channel::<Vec<PickerItem>>();
+
+            thread::spawn(move || {
+                if let Ok(mut ns) = kubectl::get_namespaces(None) {
+                    ns.sort();
+                    let items: Vec<PickerItem> = ns.iter().map(|n| picker::simple_item(n)).collect();
+                    let _ = tx.send(items);
+                }
+            });
+
+            match picker::pick(Vec::new(), Some(rx), &settings.picker)? {
+                Some(name) => Ok(SelectResult::Selected(name)),
+                None => Ok(SelectResult::Cancelled),
+            }
+        }
     }
 }

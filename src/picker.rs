@@ -433,9 +433,8 @@ fn render_list(frame: &mut Frame, state: &mut PickerState, area: Rect) {
             }
             // Source tag.
             if has_source {
-                let tag = format!("[{}]", item.source);
-                let padding = " ".repeat(16_usize.saturating_sub(tag.len()));
-                spans.push(Span::styled(tag, Style::default().fg(source_clr)));
+                let padding = " ".repeat(14_usize.saturating_sub(item.source.len()));
+                spans.push(Span::styled(item.source.as_str(), Style::default().fg(source_clr)));
                 spans.push(Span::raw(padding));
             }
             spans.extend(name_spans);
