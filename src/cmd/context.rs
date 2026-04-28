@@ -59,6 +59,36 @@ fn enter_context(
     Ok(())
 }
 
+/// Find the actual context name inside an Installed set for a provider cluster.
+///
+/// The context name in the downloaded kubeconfig may not match the name we use
+/// in the picker (e.g. Rancher generates its own context names, DO uses
+/// "do-region-name"). We try:
+/// 1. Exact match on our display name
+/// 2. Any context whose name contains the cluster name
+/// 3. The first context from the provider kubeconfig file
+#[cfg(feature = "remote")]
+fn find_provider_context_name(installed: &Installed, display_name: &str) -> String {
+    // Exact match.
+    if installed.find_context_by_name(display_name).is_some() {
+        return display_name.to_string();
+    }
+
+    // Fuzzy: context name contains the display name or vice versa.
+    for ctx in &installed.contexts {
+        if ctx.item.name.contains(display_name) || display_name.contains(&ctx.item.name) {
+            return ctx.item.name.clone();
+        }
+    }
+
+    // Last resort: first context in the list (the provider kubeconfig was loaded first).
+    installed
+        .contexts
+        .first()
+        .map(|c| c.item.name.clone())
+        .unwrap_or_else(|| display_name.to_string())
+}
+
 pub fn context(
     settings: &Settings,
     context_name: Option<String>,
@@ -125,16 +155,20 @@ fn context_with_providers(
         providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
 
         let config_file = providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
-        providers::remote::sync::cleanup_config(&config_file);
 
+        // Load the provider kubeconfig + normal configs into memory, then clean up the temp file.
         let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
         let normal_paths = settings.get_kube_configs_paths()?;
         for p in normal_paths {
             kubeconfigs.push(p.to_string_lossy().to_string());
         }
-
         let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
-        return enter_context(settings, installed, ctx_name, namespace_name.as_deref(), recursive);
+        providers::remote::sync::cleanup_config(&config_file);
+
+        // The context name inside the downloaded kubeconfig may differ from our
+        // display name. Find the actual context name from the file we just loaded.
+        let actual_ctx = find_provider_context_name(&installed, ctx_name);
+        return enter_context(settings, installed, &actual_ctx, namespace_name.as_deref(), recursive);
     }
 
     // It's a local kubeconfig context.
@@ -165,16 +199,17 @@ fn try_provider_context(
         providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
 
         let config_file = providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
-        providers::remote::sync::cleanup_config(&config_file);
 
         let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
         let normal_paths = settings.get_kube_configs_paths()?;
         for p in normal_paths {
             kubeconfigs.push(p.to_string_lossy().to_string());
         }
-
         let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
-        enter_context(settings, installed, context_name, namespace_name, recursive)?;
+        providers::remote::sync::cleanup_config(&config_file);
+
+        let actual_ctx = find_provider_context_name(&installed, context_name);
+        enter_context(settings, installed, &actual_ctx, namespace_name, recursive)?;
         return Ok(Some(()));
     }
 

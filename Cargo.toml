@@ -63,3 +63,9 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Fast release builds for local development: `cargo build --profile fast`
+[profile.fast]
+inherits = "release"
+codegen-units = 16
+lto = false

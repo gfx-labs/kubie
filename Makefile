@@ -8,15 +8,28 @@ ZSHDIR    ?= $(SHAREDIR)/zsh/site-functions
 CARGO     ?= cargo
 INSTALL   ?= install
 
-.PHONY: build release install uninstall clean
+.PHONY: build fast release install dist uninstall clean
 
 build:
 	$(CARGO) build
 
+fast:
+	$(CARGO) build --profile fast
+
 release:
 	$(CARGO) build --release
 
-install: release
+install: fast
+	$(INSTALL) -d $(BINDIR)
+	$(INSTALL) -m 755 target/fast/kubie $(BINDIR)/kubie
+	$(INSTALL) -d $(BASHDIR)
+	$(INSTALL) -m 644 completion/kubie.bash $(BASHDIR)/kubie
+	$(INSTALL) -d $(FISHDIR)
+	$(INSTALL) -m 644 completion/kubie.fish $(FISHDIR)/kubie.fish
+	$(INSTALL) -d $(ZSHDIR)
+	target/fast/kubie generate-completion zsh > $(ZSHDIR)/_kubie
+
+dist: release
 	$(INSTALL) -d $(BINDIR)
 	$(INSTALL) -m 755 target/release/kubie $(BINDIR)/kubie
 	$(INSTALL) -d $(BASHDIR)

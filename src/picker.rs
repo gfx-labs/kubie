@@ -100,6 +100,10 @@ struct PickerState {
     scroll_offset: usize,
     /// Channel for receiving new items from background threads.
     rx: Option<mpsc::Receiver<Vec<PickerItem>>>,
+    /// True while waiting for the first batch of items from the background channel.
+    loading: bool,
+    /// Animation frame counter for the loading spinner.
+    spinner_tick: usize,
     /// Preview pane width percentage (0 = disabled, 1-80).
     preview_width: u16,
     /// Minimum terminal columns to show preview.
@@ -127,6 +131,8 @@ impl PickerState {
             .map(|i| FilteredEntry { item_idx: i, match_positions: Vec::new() })
             .collect();
 
+        let loading = items.is_empty() && rx.is_some();
+
         PickerState {
             items,
             frecency_scores,
@@ -139,6 +145,8 @@ impl PickerState {
             active_tab: 0,
             scroll_offset: 0,
             rx,
+            loading,
+            spinner_tick: 0,
             preview_width: picker_settings.preview.width.min(80),
             preview_min: picker_settings.preview.min,
         }
@@ -148,19 +156,30 @@ impl PickerState {
     fn drain_incoming(&mut self) -> bool {
         let Some(rx) = &self.rx else { return false };
         let mut added = false;
-        while let Ok(batch) = rx.try_recv() {
-            for item in batch {
-                // Skip duplicates.
-                if self.items.iter().any(|existing| existing.value == item.value) {
-                    continue;
+        loop {
+            match rx.try_recv() {
+                Ok(batch) => {
+                    for item in batch {
+                        if self.items.iter().any(|existing| existing.value == item.value) {
+                            continue;
+                        }
+                        let score = self.frecency.score(&item.value);
+                        self.items.push(item);
+                        self.frecency_scores.push(score);
+                        added = true;
+                    }
                 }
-                let score = self.frecency.score(&item.value);
-                self.items.push(item);
-                self.frecency_scores.push(score);
-                added = true;
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    // Sender dropped -- loading is done.
+                    self.loading = false;
+                    self.rx = None;
+                    break;
+                }
             }
         }
         if added {
+            self.loading = false;
             self.tabs = build_tabs(&self.items);
         }
         added
@@ -331,6 +350,8 @@ fn build_tabs(items: &[PickerItem]) -> Vec<String> {
     tabs
 }
 
+const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
@@ -396,6 +417,20 @@ fn render(frame: &mut Frame, state: &mut PickerState) {
 }
 
 fn render_list(frame: &mut Frame, state: &mut PickerState, area: Rect) {
+    // Show loading indicator when waiting for items.
+    if state.loading && state.filtered.is_empty() {
+        let spinner = SPINNER_FRAMES[state.spinner_tick % SPINNER_FRAMES.len()];
+        let loading_line = Line::from(vec![
+            Span::styled(
+                format!("  {spinner} "),
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::styled("loading...", Style::default().fg(Color::DarkGray)),
+        ]);
+        frame.render_widget(Paragraph::new(loading_line), area);
+        return;
+    }
+
     let visible_height = area.height.saturating_sub(1) as usize; // -1 for the count line at bottom
 
     if state.selected < state.scroll_offset {
@@ -588,10 +623,15 @@ fn run_picker(
             state.refilter(matcher);
         }
 
+        // Advance spinner animation.
+        if state.loading {
+            state.spinner_tick = state.spinner_tick.wrapping_add(1);
+        }
+
         terminal.draw(|frame| render(frame, state))?;
 
-        // Poll with a short timeout so we can check for new items periodically.
-        if event::poll(Duration::from_millis(50))? {
+        // Poll with a short timeout so we can check for new items and animate spinner.
+        if event::poll(Duration::from_millis(80))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind != KeyEventKind::Press {
                     continue;
