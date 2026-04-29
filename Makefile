@@ -8,7 +8,6 @@ ZSHDIR    ?= $(SHAREDIR)/zsh/site-functions
 TARGET    ?= x86_64-unknown-linux-musl
 CARGO     ?= cargo
 INSTALL   ?= install
-VERSION   ?= $(shell date +%Y.%-m.%-d)
 
 .PHONY: build release install uninstall clean publish-tag
 
@@ -38,8 +37,14 @@ clean:
 	$(CARGO) clean
 
 publish-tag:
-	@sed -i 's/^version = ".*"/version = "$(VERSION)"/' Cargo.toml
-	@echo "v$(VERSION)"
-	git add Cargo.toml
-	git commit -m "v$(VERSION)"
-	git tag "v$(VERSION)"
+	@VERSION=$$(date +%Y.%-m.%-d); \
+	PATCH=0; \
+	while git rev-parse "v$$VERSION$$([ $$PATCH -gt 0 ] && echo .$$PATCH)" >/dev/null 2>&1; do \
+		PATCH=$$((PATCH + 1)); \
+	done; \
+	if [ $$PATCH -gt 0 ]; then VERSION="$$VERSION.$$PATCH"; fi; \
+	sed -i "s/^version = \".*\"/version = \"$$VERSION\"/" Cargo.toml; \
+	echo "v$$VERSION"; \
+	git add Cargo.toml; \
+	git commit -m "v$$VERSION"; \
+	git tag "v$$VERSION"
