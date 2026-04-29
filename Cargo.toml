@@ -59,8 +59,8 @@ remote = ["colored", "ureq"]
 default = ["update", "remote"]
 
 [profile.release]
-codegen-units = 1
-lto = true
+codegen-units = 16
+lto = "thin"
 opt-level = "s"
 strip = true
 
