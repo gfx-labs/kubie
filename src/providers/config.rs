@@ -181,13 +181,36 @@ fn expand(input: &str) -> String {
     result
 }
 
-/// Find the closing `)` matching the `(` at position `open`, handling nesting.
+/// Find the closing `)` matching the `(` at position `open`, handling nesting
+/// and respecting single/double quotes and backslash escapes.
 fn find_matching_paren(input: &str, open: usize) -> Option<usize> {
     let bytes = input.as_bytes();
     let mut depth = 1;
     let mut i = open + 1;
     while i < bytes.len() {
         match bytes[i] {
+            b'\\' => {
+                // Skip escaped character.
+                i += 2;
+                continue;
+            }
+            b'\'' => {
+                // Skip single-quoted string (no escapes inside single quotes).
+                i += 1;
+                while i < bytes.len() && bytes[i] != b'\'' {
+                    i += 1;
+                }
+            }
+            b'"' => {
+                // Skip double-quoted string (backslash escapes allowed).
+                i += 1;
+                while i < bytes.len() && bytes[i] != b'"' {
+                    if bytes[i] == b'\\' {
+                        i += 1; // skip escaped char
+                    }
+                    i += 1;
+                }
+            }
             b'(' => depth += 1,
             b')' => {
                 depth -= 1;
@@ -428,5 +451,20 @@ mod tests {
     #[test]
     fn expand_no_expansion() {
         assert_eq!(expand("plain string"), "plain string");
+    }
+
+    #[test]
+    fn expand_command_with_parens_in_double_quotes() {
+        assert_eq!(expand(r#"$(echo "hello)")"#), "hello)");
+    }
+
+    #[test]
+    fn expand_command_with_parens_in_single_quotes() {
+        assert_eq!(expand("$(echo 'hello)')"), "hello)");
+    }
+
+    #[test]
+    fn expand_command_with_escaped_paren() {
+        assert_eq!(expand(r"$(echo 'test')"), "test");
     }
 }
