@@ -1,17 +1,17 @@
 [package]
 authors = ["Simon Bernier St-Pierre <git@sbstp.ca>"]
 categories = ["command-line-utilities", "development-tools"]
-description = "A more powerful alternative to kubectx and kubens."
-documentation = "https://github.com/sbstp/kubie/blob/master/README.md"
+description = "A more powerful alternative to kubectx and kubens. Fork with remote provider discovery and secret injection."
+documentation = "https://github.com/gfx-labs/kubie/blob/master/README.md"
 edition = "2021"
 exclude = ["releases/**/*"]
-homepage = "https://github.com/sbstp/kubie"
+homepage = "https://github.com/gfx-labs/kubie"
 keywords = ["kubernetes", "kubectx", "kubens"]
 license = "Zlib"
 name = "kubie"
 readme = "README.md"
-repository = "https://github.com/kubie-org/kubie"
-version = "0.27.0"
+repository = "https://github.com/gfx-labs/kubie"
+version = "2026.4.29"
 
 [dependencies]
 anyhow = "1"
@@ -64,8 +64,3 @@ lto = true
 opt-level = "s"
 strip = true
 
-# Fast release builds for local development: `cargo build --profile fast`
-[profile.fast]
-inherits = "release"
-codegen-units = 16
-lto = false

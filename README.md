@@ -1,8 +1,13 @@
 # Kubie
 
 > [!NOTE]
-> This is a fork of [sbstp/kubie](https://github.com/sbstp/kubie) with significant new features.
-> See [upstream issue #385](https://github.com/sbstp/kubie/issues/385) regarding the future of upstream development.
+> This is a hard fork of [kubie-org/kubie](https://github.com/kubie-org/kubie) maintained by [gfx-labs](https://github.com/gfx-labs).
+>
+> This fork adds remote provider discovery (DigitalOcean, Rancher, GKE), secret injection via
+> environment variables and shell command expansion, a custom TUI picker, and other changes
+> described below. These changes are sweeping and break much of the original internals (the
+> skim dependency is replaced, the config schema is extended, new module trees are added),
+> so they are unlikely to be merged upstream.
 
 <img src="./assets/logo.svg" align="right"/>
 
@@ -15,19 +20,16 @@ Kubie also has other nice features such as `kubie exec` which allows you to exec
 namespace without having to spawn a shell and `kubie lint` which scans your k8s config files for issues and informs
 you of what they are.
 
-### Fork additions
+### What this fork adds
 
-This fork adds the following features on top of upstream kubie:
-
-- **Interactive TUI picker** -- replaced skim with a custom ratatui + nucleo fuzzy finder featuring match highlighting, a preview pane with cluster metadata, and tabbed source filtering (Left/Right to switch between All / per-provider views)
-- **Remote provider discovery** -- auto-discover Kubernetes clusters from cloud APIs (DigitalOcean, Rancher, GKE) and fetch kubeconfigs on demand; configured under the `providers:` key in `kubie.yaml`
-- **`Secret` type with lazy expansion** -- provider config fields that hold secrets support `${VAR}`, `${VAR:-default}`, and `$(command)` syntax; expansion is lazy (commands only run when the value is first needed, not at config load time)
-- **Frecency sorting** -- the picker sorts contexts by a frequency + recency score so your most-used clusters float to the top; selection history is stored at `~/.local/share/kubie/frecency.json`
-- **Non-blocking background sync** -- the picker opens instantly with cached data while provider APIs are queried in the background; new clusters stream in as they're discovered
-- **`--local` flag** -- skip all remote providers and only show local kubeconfig contexts (`kubie ctx --local`)
-- **`--no-sync` flag** -- use cached provider metadata without contacting remote APIs (`kubie ctx --no-sync`)
-- **Configurable preview pane** -- `picker.preview.width` (percentage, 0 to disable) and `picker.preview.min` (minimum terminal columns to show preview)
-- **Makefile** -- `make install` builds a release binary and installs to `~/.local/bin` with shell completions
+- **Remote provider discovery** -- auto-discover Kubernetes clusters from cloud provider APIs (DigitalOcean, Rancher, GKE) and fetch kubeconfigs on demand. Configured under the `providers:` key in `kubie.yaml`. Provider backends are pluggable -- adding a new one is a single Rust file implementing the `Provider` trait.
+- **Secret injection** -- provider config fields use a `Secret` type that supports `${VAR}`, `${VAR:-default}`, and `$(command)` syntax. Expansion is lazy: commands like `$(gcloud auth print-access-token)` only run when the value is first needed, not at config load time. Fields must explicitly opt in via the `Secret` type -- plain `String` fields like `type` and `url` are never expanded.
+- **Custom TUI picker** -- replaced skim with a ratatui + nucleo fuzzy finder. Features match highlighting, a preview pane with cluster metadata, tabbed source filtering (Left/Right or Tab/Shift-Tab), and `@provider` query syntax to filter by source.
+- **Frecency sorting** -- the picker sorts contexts by frequency + recency so your most-used clusters float to the top.
+- **Non-blocking background sync** -- the picker opens instantly with cached data while provider APIs are queried in the background. New clusters stream into the list as they are discovered. Namespace selection (`kubie ns`) also opens immediately and loads namespaces in the background with a loading spinner.
+- **`--local` / `--no-sync` flags** -- `kubie ctx --local` skips all remote providers. `kubie ctx --no-sync` uses cached metadata without contacting APIs.
+- **Configurable preview pane** -- `picker.preview.width` and `picker.preview.min` control the preview pane size and visibility.
+- **Static musl builds** -- `make install` produces a statically linked binary with no glibc dependency.
 
 * [Installation](#installation)
 * [Usage](#usage)
@@ -42,10 +44,40 @@ Thanks to [@ahermant](https://github.com/ahermant) for the lovely logo!
 You can download a binary for Linux or OS X on the [GitHub releases page](https://github.com/sbstp/kubie/releases). You
 can use `curl` or `wget` to download it. Don't forget to `chmod +x` the file!
 
+### From source
+
+Build dependencies:
+
+```sh
+# Rust toolchain
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# musl target (for static binaries with no glibc dependency)
+rustup target add x86_64-unknown-linux-musl
+
+# musl libc and mold linker
+# Debian/Ubuntu:
+sudo apt install musl-tools mold
+# Arch:
+sudo pacman -S musl mold
+# Fedora:
+sudo dnf install musl-gcc mold
+```
+
+Build and install to `~/.local/bin`:
+
+```sh
+make install
+```
+
+This produces a statically linked musl binary. Other targets:
+
+- `make build` -- debug build
+- `make fast` -- optimized build without LTO (fast compile)
+- `make dist` -- fully optimized release build (LTO, single codegen unit)
+
 ### Cargo
-You can build `kubie` from source using `cargo` and crates.io. If you do not have a Rust compiler installed, go to
-[rustup.rs](https://rustup.rs) to get one. Then you can run `cargo install kubie` and kubie will be downloaded from
-crates.io and then built.
+You can also install via `cargo install kubie` from crates.io.
 
 ### Homebrew
 You can install `kubie` from Homebrew by running `brew install kubie`.

@@ -3,115 +3,99 @@ name: Release
 on:
   push:
     tags:
-      - '*'
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
-  build-linux-amd64-static:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: x86_64-unknown-linux-musl
-      - run: sudo apt-get update && sudo apt-get install -y musl-tools
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target x86_64-unknown-linux-musl
-      - uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/x86_64-unknown-linux-musl/release/kubie
-          asset_name: kubie-linux-amd64
-          tag: ${{ github.ref }}
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            asset: kubie-linux-amd64
+            cross: false
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            asset: kubie-linux-arm64
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            asset: kubie-darwin-amd64
+            cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            asset: kubie-darwin-arm64
+            cross: false
 
-  build-linux-arm32-static:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: arm-unknown-linux-musleabi
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: build
-          args: --release --target arm-unknown-linux-musleabi
-      - uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/arm-unknown-linux-musleabi/release/kubie
-          asset_name: kubie-linux-arm32
-          tag: ${{ github.ref }}
+    runs-on: ${{ matrix.os }}
 
-  build-linux-arm64-static:
-    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: aarch64-unknown-linux-musl
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: build
-          args: --release --target aarch64-unknown-linux-musl
-      - uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/aarch64-unknown-linux-musl/release/kubie
-          asset_name: kubie-linux-arm64
-          tag: ${{ github.ref }}
+      - uses: actions/checkout@v4
 
-  build-macos-amd64:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: x86_64-apple-darwin
-      - run: SDKROOT=$(xcrun --sdk macosx --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target x86_64-apple-darwin
-      - uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/x86_64-apple-darwin/release/kubie
-          asset_name: kubie-darwin-amd64
-          tag: ${{ github.ref }}
+          targets: ${{ matrix.target }}
 
-  build-macos-arm64:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: Swatinem/rust-cache@v2
         with:
-          toolchain: stable
-          target: aarch64-apple-darwin
-      - run: SDKROOT=$(xcrun --sdk macosx --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target aarch64-apple-darwin
-      - uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/aarch64-apple-darwin/release/kubie
-          asset_name: kubie-darwin-arm64
-          tag: ${{ github.ref }}
+          key: release-${{ matrix.target }}
 
-  publish-crates-io:
-    name: Publish to crates.io
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: cargo publish --token ${CRATES_TOKEN}
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install musl-tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build (native)
+        if: "!matrix.cross"
+        run: cargo build --release --target ${{ matrix.target }}
         env:
-          CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
+          SDKROOT: /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: target/${{ matrix.target }}/release/kubie
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          for dir in artifacts/*/; do
+            name=$(basename "$dir")
+            cp "$dir/kubie" "release/$name"
+            chmod +x "release/$name"
+          done
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > sha256sums.txt
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release/*

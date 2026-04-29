@@ -1,79 +1,65 @@
-name: Test
+name: CI
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
   pull_request:
 
 jobs:
-  test-linux-amd64:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-features -- -D warnings
+      - run: cargo test --all-features
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all-features
-
-  test-linux-arm32:
+  build-linux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: arm-unknown-linux-musleabi
-          override: true
-
-      - uses: actions-rs/cargo@v1
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
         with:
-          use-cross: true
-          command: test
-          args: --all-features --target arm-unknown-linux-musleabi
+          key: ${{ matrix.target }}
+      - name: Install cross
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Install musl-tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build (native)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: cargo build --all-features --target ${{ matrix.target }}
+      - name: Build (cross)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: cross build --all-features --target ${{ matrix.target }}
 
-  test-linux-arm64:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: aarch64-unknown-linux-musl
-          override: true
-
-      - uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: test
-          args: --all-features --target aarch64-unknown-linux-musl
-
-  test-macos-amd64:
+  build-macos:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-
-      - uses: actions-rs/cargo@v1
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
         with:
-          command: test
-          args: --all-features
-
-  # We use an amd64 machine to cross compile for arm64. We cannot run the tests,
-  # only verify that the project compiles well.
-  build-macos-arm64:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: aarch64-apple-darwin
-
-      - run: SDKROOT=$(xcrun --sdk macosx --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --all-features --target aarch64-apple-darwin
+          key: ${{ matrix.target }}
+      - run: cargo build --all-features --target ${{ matrix.target }}
+        env:
+          SDKROOT: /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
