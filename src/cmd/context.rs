@@ -1,4 +1,8 @@
+use std::io::{self, Write};
+
 use anyhow::Result;
+use nucleo_matcher::pattern::{AtomKind, CaseMatching, Normalization, Pattern};
+use nucleo_matcher::{Config, Matcher};
 
 use crate::cmd::{select_or_list_context, SelectResult};
 use crate::kubeconfig::{self, Installed};
@@ -89,6 +93,55 @@ fn find_provider_context_name(installed: &Installed, display_name: &str) -> Stri
         .unwrap_or_else(|| display_name.to_string())
 }
 
+/// Fuzzy-match a context name against installed contexts.
+/// If a close match is found, prompts the user for confirmation.
+/// Returns Some(resolved_name) if confirmed, None if no match or rejected.
+fn fuzzy_resolve_context(query: &str, installed: &Installed) -> Result<Option<String>> {
+    let mut matcher = Matcher::new(Config::DEFAULT);
+    let pattern = Pattern::new(
+        query,
+        CaseMatching::Ignore,
+        Normalization::Smart,
+        AtomKind::Fuzzy,
+    );
+
+    // Score all contexts and collect matches.
+    let mut scored: Vec<(&str, u32)> = installed
+        .contexts
+        .iter()
+        .filter_map(|ctx| {
+            let name = &ctx.item.name;
+            let mut buf = Vec::new();
+            let hay = nucleo_matcher::Utf32Str::new(name, &mut buf);
+            let score = pattern.score(hay, &mut matcher)?;
+            Some((name.as_str(), score as u32))
+        })
+        .collect();
+
+    if scored.is_empty() {
+        return Ok(None);
+    }
+
+    // Sort by score descending.
+    scored.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let best = scored[0].0;
+
+    // Prompt user for confirmation.
+    eprint!("did you mean \x1b[1;36m{best}\x1b[0m? [Y/n] ");
+    io::stderr().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let input = input.trim().to_lowercase();
+
+    if input.is_empty() || input == "y" || input == "yes" {
+        Ok(Some(best.to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
 pub fn context(
     settings: &Settings,
     context_name: Option<String>,
@@ -128,7 +181,16 @@ pub fn context(
         }
     }
 
-    enter_context(settings, installed, &context_name, namespace_name.as_deref(), recursive)
+    // If exact match exists, use it directly.
+    if installed.find_context_by_name(&context_name).is_some() {
+        return enter_context(settings, installed, &context_name, namespace_name.as_deref(), recursive);
+    }
+
+    // No exact match -- try fuzzy matching.
+    match fuzzy_resolve_context(&context_name, &installed)? {
+        Some(resolved) => enter_context(settings, installed, &resolved, namespace_name.as_deref(), recursive),
+        None => anyhow::bail!("No context matching '{context_name}'"),
+    }
 }
 
 /// Handle context switching through the provider-aware picker.
