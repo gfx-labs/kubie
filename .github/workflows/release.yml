@@ -56,13 +56,20 @@ jobs:
 
       - name: Build (cross)
         if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }}
+        run: |
+          # Clear local .cargo/config.toml linker settings that assume clang+mold
+          rm -f .cargo/config.toml
+          cross build --release --target ${{ matrix.target }}
 
       - name: Package binary
         run: |
           cp target/${{ matrix.target }}/release/kubie ${{ matrix.asset }}
           chmod +x ${{ matrix.asset }}
-          sha256sum ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
+          if command -v sha256sum &>/dev/null; then
+            sha256sum ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
+          else
+            shasum -a 256 ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

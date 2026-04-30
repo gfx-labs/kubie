@@ -46,5 +46,5 @@ publish-tag:
 	sed -i '0,/^version = ".*"/{s/^version = ".*"/version = "'"$$VERSION"'"/}' Cargo.toml; \
 	echo "v$$VERSION"; \
 	git add Cargo.toml; \
-	git commit -m "v$$VERSION"; \
+	git diff --cached --quiet || git commit -m "v$$VERSION"; \
 	git tag "v$$VERSION"
