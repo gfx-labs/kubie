@@ -9,7 +9,7 @@ TARGET    ?= x86_64-unknown-linux-musl
 CARGO     ?= cargo
 INSTALL   ?= install
 
-.PHONY: build release install uninstall clean publish-tag
+.PHONY: build release install install-completions uninstall clean publish-tag
 
 build:
 	$(CARGO) build --target $(TARGET)
@@ -20,10 +20,12 @@ release:
 install: release
 	$(INSTALL) -d $(BINDIR)
 	$(INSTALL) -m 755 target/$(TARGET)/release/kubie $(BINDIR)/kubie
+
+install-completions: install
 	$(INSTALL) -d $(BASHDIR)
-	$(INSTALL) -m 644 completion/kubie.bash $(BASHDIR)/kubie
+	$(BINDIR)/kubie generate-completion bash > $(BASHDIR)/kubie
 	$(INSTALL) -d $(FISHDIR)
-	$(INSTALL) -m 644 completion/kubie.fish $(FISHDIR)/kubie.fish
+	$(BINDIR)/kubie generate-completion fish > $(FISHDIR)/kubie.fish
 	$(INSTALL) -d $(ZSHDIR)
 	$(BINDIR)/kubie generate-completion zsh > $(ZSHDIR)/_kubie
 
