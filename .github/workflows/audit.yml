@@ -3,7 +3,7 @@ name: Audit
 on:
   push:
     branches:
-      - master
+      - remote-feature
 
 jobs:
   security_audit:

@@ -73,23 +73,23 @@ make install
 This produces a statically linked musl binary. Other targets:
 
 - `make build` -- debug build
-- `make fast` -- optimized build without LTO (fast compile)
-- `make dist` -- fully optimized release build (LTO, single codegen unit)
+- `make release` -- optimized release build
 
 ### Cargo
-You can also install via `cargo install kubie` from crates.io.
 
-### Homebrew
-You can install `kubie` from Homebrew by running `brew install kubie`.
+Install the latest release directly from git:
 
-### MacPorts
-You can also install `kubie` from [MacPorts](https://www.macports.org) by running `sudo port install kubie`.
+```sh
+cargo install --git https://github.com/gfx-labs/kubie --branch release
+```
 
-### Nix
-There is a `kubie` Nix package maintained by @illiusdope that you can install.
+### Binary
 
-### Arch Linux
-`kubie` is available in the [extra repository](https://archlinux.org/packages/extra/x86_64/kubie/), and it can be installed by running `pacman -S kubie`.
+Download a prebuilt static binary from the [GitHub releases page](https://github.com/gfx-labs/kubie/releases).
+Binaries are available for linux-amd64, linux-arm64, darwin-amd64, and darwin-arm64.
+
+> **Note:** The upstream package managers (Homebrew, MacPorts, Nix, Arch) install
+> the original [kubie-org/kubie](https://github.com/kubie-org/kubie), not this fork.
 
 ### Autocompletion
 

@@ -90,3 +90,6 @@ jobs:
         with:
           generate_release_notes: true
           files: artifacts/*
+
+      - name: Update release branch
+        run: git push origin HEAD:refs/heads/release --force
