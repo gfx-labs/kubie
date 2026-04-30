@@ -39,7 +39,7 @@ clean:
 	$(CARGO) clean
 
 publish-tag:
-	@BASE=$$(date +%Y.%-m%-d); \
+	@BASE=$$(date +%Y.%-m); \
 	PATCH=0; \
 	while git rev-parse "v$$BASE.$$PATCH" >/dev/null 2>&1; do \
 		PATCH=$$((PATCH + 1)); \
