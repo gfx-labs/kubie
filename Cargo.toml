@@ -11,7 +11,7 @@ license = "Zlib"
 name = "kubie"
 readme = "README.md"
 repository = "https://github.com/gfx-labs/kubie"
-version = "2026.4.29.3"
+version = "2026.429.0"
 
 [dependencies]
 anyhow = "1"
@@ -50,7 +50,7 @@ aws-lc-rs = { version = "1.16", default-features = false, features = [
 [dependencies.attohttpc]
 default-features = false
 features = ["compress", "json", "tls-rustls-native-roots"]
-version = "2026.4.29.3"
+version = "2026.429.0"
 optional = true
 
 [features]
