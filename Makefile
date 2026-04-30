@@ -37,12 +37,12 @@ clean:
 	$(CARGO) clean
 
 publish-tag:
-	@VERSION=$$(date +%Y.%-m.%-d); \
+	@BASE=$$(date +%Y.%-m%-d); \
 	PATCH=0; \
-	while git rev-parse "v$$VERSION$$([ $$PATCH -gt 0 ] && echo .$$PATCH)" >/dev/null 2>&1; do \
+	while git rev-parse "v$$BASE.$$PATCH" >/dev/null 2>&1; do \
 		PATCH=$$((PATCH + 1)); \
 	done; \
-	if [ $$PATCH -gt 0 ]; then VERSION="$$VERSION.$$PATCH"; fi; \
+	VERSION="$$BASE.$$PATCH"; \
 	sed -i "s/^version = \".*\"/version = \"$$VERSION\"/" Cargo.toml; \
 	echo "v$$VERSION"; \
 	git add Cargo.toml; \
