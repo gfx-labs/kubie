@@ -43,7 +43,7 @@ publish-tag:
 		PATCH=$$((PATCH + 1)); \
 	done; \
 	VERSION="$$BASE.$$PATCH"; \
-	sed -i "s/^version = \".*\"/version = \"$$VERSION\"/" Cargo.toml; \
+	sed -i '0,/^version = ".*"/{s/^version = ".*"/version = "'"$$VERSION"'"/}' Cargo.toml; \
 	echo "v$$VERSION"; \
 	git add Cargo.toml; \
 	git commit -m "v$$VERSION"; \
