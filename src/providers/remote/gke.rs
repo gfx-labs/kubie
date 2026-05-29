@@ -243,8 +243,12 @@ fn convert_cluster(account: &str, project: &str, c: &GkeCluster) -> ClusterInfo 
     }
 }
 
-/// Build a kubeconfig YAML from cluster info and an access token.
-fn build_kubeconfig(cluster: &GkeCluster, project: &str, token: &str) -> String {
+/// Build a kubeconfig YAML from cluster info.
+///
+/// Uses the `gke-gcloud-auth-plugin` exec-based credential provider so that
+/// tokens are refreshed automatically by kubectl. This is the same mechanism
+/// that `gcloud container clusters get-credentials` uses.
+fn build_kubeconfig(cluster: &GkeCluster, project: &str) -> String {
     let ca_cert = cluster
         .master_auth
         .as_ref()
@@ -270,7 +274,11 @@ contexts:
 users:
 - name: {context_name}
   user:
-    token: "{token}"
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      command: gke-gcloud-auth-plugin
+      installHint: Install gke-gcloud-auth-plugin for kubectl by following https://cloud.google.com/kubernetes-engine/docs/how-to/cluster-access-for-kubectl#install_plugin
+      provideClusterInfo: true
 "#,
         endpoint = cluster.endpoint,
     )
@@ -346,6 +354,6 @@ impl Provider for Gke {
             bail!("GKE cluster {} has no endpoint", cluster.name);
         }
 
-        Ok(build_kubeconfig(&gke_cluster, project, token))
+        Ok(build_kubeconfig(&gke_cluster, project))
     }
 }
