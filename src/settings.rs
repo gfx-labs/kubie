@@ -52,19 +52,11 @@ pub struct Fzf {
 }
 
 /// TUI picker settings.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Picker {
     /// Preview pane configuration.
     #[serde(default)]
     pub preview: PickerPreview,
-}
-
-impl Default for Picker {
-    fn default() -> Self {
-        Picker {
-            preview: PickerPreview::default(),
-        }
-    }
 }
 
 /// Preview pane settings within the picker.
@@ -153,12 +145,10 @@ impl Settings {
         if !has_kubeconfig_provider {
             use crate::providers::config::ProviderEntry;
 
-            let config_value = serde_yaml::to_value(
-                &crate::providers::kubeconfig::KubeConfigProviderConfig {
-                    include: settings.configs.include.clone(),
-                    exclude: settings.configs.exclude.clone(),
-                },
-            )
+            let config_value = serde_yaml::to_value(&crate::providers::kubeconfig::KubeConfigProviderConfig {
+                include: settings.configs.include.clone(),
+                exclude: settings.configs.exclude.clone(),
+            })
             .unwrap_or_default();
 
             settings.providers.entries.insert(

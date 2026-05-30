@@ -38,10 +38,7 @@ pub fn full_sync(providers: &[NamedProvider]) -> anyhow::Result<Vec<ClusterInfo>
     let all_clusters = fetch_all_clusters(providers);
 
     if !all_clusters.is_empty() {
-        eprintln!(
-            "{}",
-            format!("Found {} cluster(s).", all_clusters.len()).green()
-        );
+        eprintln!("{}", format!("Found {} cluster(s).", all_clusters.len()).green());
     }
 
     cache::save_metadata(&all_clusters)?;
@@ -66,18 +63,8 @@ pub fn ensure_hydrated(cluster: &ClusterInfo, providers: &[NamedProvider]) -> an
     let (_, provider) = providers
         .iter()
         .find(|(name, p)| p.provider_type() == cluster.provider && *name == cluster.account)
-        .or_else(|| {
-            providers
-                .iter()
-                .find(|(_, p)| p.provider_type() == cluster.provider)
-        })
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "No provider '{}' found for cluster {}",
-                cluster.provider,
-                cluster.name
-            )
-        })?;
+        .or_else(|| providers.iter().find(|(_, p)| p.provider_type() == cluster.provider))
+        .ok_or_else(|| anyhow::anyhow!("No provider '{}' found for cluster {}", cluster.provider, cluster.name))?;
 
     eprintln!(
         "{}",

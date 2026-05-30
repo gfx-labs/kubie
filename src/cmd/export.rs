@@ -59,10 +59,7 @@ pub fn export(
 
 /// Get kubeconfig paths from providers (hydrated on demand).
 #[cfg(feature = "remote")]
-fn get_provider_kubeconfig_paths(
-    settings: &Settings,
-    no_sync: bool,
-) -> Vec<std::path::PathBuf> {
+fn get_provider_kubeconfig_paths(settings: &Settings, no_sync: bool) -> Vec<std::path::PathBuf> {
     use crate::providers;
 
     let prov = providers::config::build_providers(&settings.providers, None);
@@ -71,7 +68,10 @@ fn get_provider_kubeconfig_paths(
     }
 
     let clusters = if no_sync {
-        providers::remote::cache::load_metadata().ok().flatten().unwrap_or_default()
+        providers::remote::cache::load_metadata()
+            .ok()
+            .flatten()
+            .unwrap_or_default()
     } else {
         match providers::remote::cache::load_metadata().ok().flatten() {
             Some(c) if !c.is_empty() => c,

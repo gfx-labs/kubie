@@ -45,6 +45,7 @@ fn run_in_context(kubeconfig: &KubeConfig, args: &[String]) -> anyhow::Result<i3
     Ok(status.code().unwrap_or(0))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn exec(
     settings: &Settings,
     context_name: String,
@@ -117,10 +118,7 @@ pub fn exec(
 
 /// Get kubeconfig paths from providers (hydrated on demand).
 #[cfg(feature = "remote")]
-fn get_provider_kubeconfig_paths(
-    settings: &Settings,
-    no_sync: bool,
-) -> Vec<std::path::PathBuf> {
+fn get_provider_kubeconfig_paths(settings: &Settings, no_sync: bool) -> Vec<std::path::PathBuf> {
     use crate::providers;
 
     let prov = providers::config::build_providers(&settings.providers, None);
@@ -129,7 +127,10 @@ fn get_provider_kubeconfig_paths(
     }
 
     let clusters = if no_sync {
-        providers::remote::cache::load_metadata().ok().flatten().unwrap_or_default()
+        providers::remote::cache::load_metadata()
+            .ok()
+            .flatten()
+            .unwrap_or_default()
     } else {
         match providers::remote::cache::load_metadata().ok().flatten() {
             Some(c) if !c.is_empty() => {

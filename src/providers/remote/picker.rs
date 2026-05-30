@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::sync::mpsc;
 
-use crate::providers::ClusterInfo;
-use crate::providers::config::ProvidersConfig;
 use super::cache;
 use super::sync::fetch_all_clusters;
 use crate::picker::{self, PickerItem};
+use crate::providers::config::ProvidersConfig;
+use crate::providers::ClusterInfo;
 use crate::settings::Settings;
 
 /// Result of the provider-aware context picker.
@@ -28,16 +28,10 @@ pub fn pick_context(
     // Load cached clusters instantly (microseconds).
     let cached_clusters = cache::load_metadata()?.unwrap_or_default();
 
-    let provider_names: HashSet<String> = cached_clusters
-        .iter()
-        .map(|c| c.context_name.clone())
-        .collect();
+    let provider_names: HashSet<String> = cached_clusters.iter().map(|c| c.context_name.clone()).collect();
 
     // Build initial items from cache.
-    let mut items: Vec<PickerItem> = cached_clusters
-        .iter()
-        .map(|c| picker::provider_context_item(c))
-        .collect();
+    let mut items: Vec<PickerItem> = cached_clusters.iter().map(picker::provider_context_item).collect();
 
     // Add local kubeconfig contexts (excluding provider-discovered ones).
     // Find kubeconfig providers from the config and list their clusters.
@@ -73,7 +67,7 @@ pub fn pick_context(
             let new_items: Vec<PickerItem> = fresh
                 .iter()
                 .filter(|c| !existing_names.contains(&c.context_name))
-                .map(|c| picker::provider_context_item(c))
+                .map(picker::provider_context_item)
                 .collect();
 
             if !new_items.is_empty() {

@@ -1,8 +1,8 @@
 use anyhow::{bail, Context};
 use serde::Deserialize;
 
-use crate::providers::{ClusterInfo, PreviewField, Provider};
 use crate::providers::config::Secret;
+use crate::providers::{ClusterInfo, PreviewField, Provider};
 
 const GKE_API_BASE: &str = "https://container.googleapis.com";
 
@@ -143,12 +143,10 @@ fn gke_context_name(project: &str, location: &str, name: &str) -> String {
 fn convert_cluster(account: &str, project: &str, c: &GkeCluster) -> ClusterInfo {
     let context_name = gke_context_name(project, &c.location, &c.name);
 
-    let mut metadata = vec![
-        PreviewField {
-            label: "Location".into(),
-            value: c.location.clone(),
-        },
-    ];
+    let mut metadata = vec![PreviewField {
+        label: "Location".into(),
+        value: c.location.clone(),
+    }];
 
     if !c.current_master_version.is_empty() {
         metadata.push(PreviewField {
@@ -324,18 +322,13 @@ impl Provider for Gke {
         // Parse the context name to extract project/location/name.
         let parts: Vec<&str> = cluster.context_name.splitn(4, '_').collect();
         if parts.len() < 4 || parts[0] != "gke" {
-            bail!(
-                "Unexpected GKE context name format: {}",
-                cluster.context_name
-            );
+            bail!("Unexpected GKE context name format: {}", cluster.context_name);
         }
         let project = parts[1];
         let location = parts[2];
         let name = parts[3];
 
-        let url = format!(
-            "{GKE_API_BASE}/v1/projects/{project}/locations/{location}/clusters/{name}"
-        );
+        let url = format!("{GKE_API_BASE}/v1/projects/{project}/locations/{location}/clusters/{name}");
 
         let body: String = ureq::get(&url)
             .header("Authorization", &format!("Bearer {token}"))
@@ -343,9 +336,7 @@ impl Provider for Gke {
             .with_context(|| format!("Failed to get cluster details for {}", cluster.name))?
             .body_mut()
             .read_to_string()
-            .with_context(|| {
-                format!("Failed to read cluster details for {}", cluster.name)
-            })?;
+            .with_context(|| format!("Failed to read cluster details for {}", cluster.name))?;
 
         let gke_cluster: GkeCluster = serde_json::from_str(&body)
             .with_context(|| format!("Failed to parse cluster details for {}", cluster.name))?;

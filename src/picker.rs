@@ -128,7 +128,10 @@ impl PickerState {
         });
         let filtered = indices
             .into_iter()
-            .map(|i| FilteredEntry { item_idx: i, match_positions: Vec::new() })
+            .map(|i| FilteredEntry {
+                item_idx: i,
+                match_positions: Vec::new(),
+            })
             .collect();
 
         let loading = items.is_empty() && rx.is_some();
@@ -216,13 +219,17 @@ impl PickerState {
                 .collect();
         } else {
             let name_pattern = if has_name_query {
-                Some(Pattern::new(name_query, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy))
+                Some(Pattern::new(
+                    name_query,
+                    CaseMatching::Ignore,
+                    Normalization::Smart,
+                    AtomKind::Fuzzy,
+                ))
             } else {
                 None
             };
-            let source_pattern = source_query.map(|sq| {
-                Pattern::new(sq, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy)
-            });
+            let source_pattern =
+                source_query.map(|sq| Pattern::new(sq, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy));
 
             let mut scored: Vec<(usize, u32, Vec<u32>)> = self
                 .items
@@ -237,7 +244,7 @@ impl PickerState {
                         let mut buf = Vec::new();
                         let hay = nucleo_matcher::Utf32Str::new(&item.source, &mut buf);
                         let score = sp.score(hay, matcher)?;
-                        total_score += score as u32;
+                        total_score += score;
                     }
 
                     // Name matching (default: fuzzy against display name).
@@ -246,7 +253,7 @@ impl PickerState {
                         let mut buf = Vec::new();
                         let hay = nucleo_matcher::Utf32Str::new(&item.display, &mut buf);
                         let score = np.score(hay, matcher)?;
-                        total_score += score as u32;
+                        total_score += score;
 
                         np.indices(hay, matcher, &mut name_positions);
                         name_positions.sort_unstable();
@@ -421,10 +428,7 @@ fn render_list(frame: &mut Frame, state: &mut PickerState, area: Rect) {
     if state.loading && state.filtered.is_empty() {
         let spinner = SPINNER_FRAMES[state.spinner_tick % SPINNER_FRAMES.len()];
         let loading_line = Line::from(vec![
-            Span::styled(
-                format!("  {spinner} "),
-                Style::default().fg(Color::Cyan),
-            ),
+            Span::styled(format!("  {spinner} "), Style::default().fg(Color::Cyan)),
             Span::styled("loading...", Style::default().fg(Color::DarkGray)),
         ]);
         frame.render_widget(Paragraph::new(loading_line), area);
@@ -453,11 +457,7 @@ fn render_list(frame: &mut Frame, state: &mut PickerState, area: Rect) {
             let has_source = !item.source.is_empty();
 
             // Build display name spans with match highlighting.
-            let name_spans = build_highlighted_spans(
-                &item.display,
-                &entry.match_positions,
-                is_selected,
-            );
+            let name_spans = build_highlighted_spans(&item.display, &entry.match_positions, is_selected);
 
             let mut spans = Vec::new();
             // Selection indicator.
@@ -479,8 +479,7 @@ fn render_list(frame: &mut Frame, state: &mut PickerState, area: Rect) {
         .collect();
 
     let count_text = format!(" {}/{} ", state.filtered.len(), state.items.len());
-    let list_block = Block::default()
-        .title_bottom(Line::from(count_text).right_aligned());
+    let list_block = Block::default().title_bottom(Line::from(count_text).right_aligned());
 
     frame.render_widget(List::new(items).block(list_block), area);
 }
@@ -521,8 +520,6 @@ fn build_highlighted_spans<'a>(display: &'a str, positions: &[u32], is_selected:
 
     spans
 }
-
-
 
 fn render_preview(frame: &mut Frame, state: &PickerState, area: Rect) {
     // Use a thin left-side separator instead of a full border box.
@@ -578,7 +575,11 @@ fn source_color(source: &str) -> Color {
 ///
 /// Items are displayed immediately. If `rx` is provided, new items arriving on
 /// the channel will be merged into the list in real time (for background sync).
-pub fn pick(items: Vec<PickerItem>, rx: Option<mpsc::Receiver<Vec<PickerItem>>>, picker_settings: &crate::settings::Picker) -> Result<Option<String>> {
+pub fn pick(
+    items: Vec<PickerItem>,
+    rx: Option<mpsc::Receiver<Vec<PickerItem>>>,
+    picker_settings: &crate::settings::Picker,
+) -> Result<Option<String>> {
     if items.is_empty() && rx.is_none() {
         anyhow::bail!("No items to pick from.");
     }
@@ -639,54 +640,97 @@ fn run_picker(
 
                 match key {
                     KeyEvent { code: KeyCode::Esc, .. }
-                    | KeyEvent { code: KeyCode::Char('c'), modifiers: KeyModifiers::CONTROL, .. } => {
+                    | KeyEvent {
+                        code: KeyCode::Char('c'),
+                        modifiers: KeyModifiers::CONTROL,
+                        ..
+                    } => {
                         return Ok(None);
                     }
 
-                    KeyEvent { code: KeyCode::Enter, .. } => {
+                    KeyEvent {
+                        code: KeyCode::Enter, ..
+                    } => {
                         return Ok(state.selected_item().map(|item| item.value.clone()));
                     }
 
                     KeyEvent { code: KeyCode::Up, .. }
-                    | KeyEvent { code: KeyCode::Char('k'), modifiers: KeyModifiers::CONTROL, .. }
-                    | KeyEvent { code: KeyCode::Char('p'), modifiers: KeyModifiers::CONTROL, .. } => {
+                    | KeyEvent {
+                        code: KeyCode::Char('k'),
+                        modifiers: KeyModifiers::CONTROL,
+                        ..
+                    }
+                    | KeyEvent {
+                        code: KeyCode::Char('p'),
+                        modifiers: KeyModifiers::CONTROL,
+                        ..
+                    } => {
                         state.move_up();
                     }
 
-                    KeyEvent { code: KeyCode::Down, .. }
-                    | KeyEvent { code: KeyCode::Char('j'), modifiers: KeyModifiers::CONTROL, .. }
-                    | KeyEvent { code: KeyCode::Char('n'), modifiers: KeyModifiers::CONTROL, .. } => {
+                    KeyEvent {
+                        code: KeyCode::Down, ..
+                    }
+                    | KeyEvent {
+                        code: KeyCode::Char('j'),
+                        modifiers: KeyModifiers::CONTROL,
+                        ..
+                    }
+                    | KeyEvent {
+                        code: KeyCode::Char('n'),
+                        modifiers: KeyModifiers::CONTROL,
+                        ..
+                    } => {
                         state.move_down();
                     }
 
-                    KeyEvent { code: KeyCode::Left, .. }
-                    | KeyEvent { code: KeyCode::BackTab, .. } => {
+                    KeyEvent {
+                        code: KeyCode::Left, ..
+                    }
+                    | KeyEvent {
+                        code: KeyCode::BackTab, ..
+                    } => {
                         state.tab_left();
                         state.refilter(matcher);
                     }
 
-                    KeyEvent { code: KeyCode::Right, .. }
+                    KeyEvent {
+                        code: KeyCode::Right, ..
+                    }
                     | KeyEvent { code: KeyCode::Tab, .. } => {
                         state.tab_right();
                         state.refilter(matcher);
                     }
 
-                    KeyEvent { code: KeyCode::Char('u'), modifiers: KeyModifiers::CONTROL, .. } => {
+                    KeyEvent {
+                        code: KeyCode::Char('u'),
+                        modifiers: KeyModifiers::CONTROL,
+                        ..
+                    } => {
                         state.clear_query();
                         state.refilter(matcher);
                     }
 
-                    KeyEvent { code: KeyCode::Backspace, .. } => {
+                    KeyEvent {
+                        code: KeyCode::Backspace,
+                        ..
+                    } => {
                         state.delete_char_before();
                         state.refilter(matcher);
                     }
 
-                    KeyEvent { code: KeyCode::Delete, .. } => {
+                    KeyEvent {
+                        code: KeyCode::Delete, ..
+                    } => {
                         state.delete_char_after();
                         state.refilter(matcher);
                     }
 
-                    KeyEvent { code: KeyCode::Char(c), modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT, .. } => {
+                    KeyEvent {
+                        code: KeyCode::Char(c),
+                        modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
+                        ..
+                    } => {
                         state.insert_char(c);
                         state.refilter(matcher);
                     }
@@ -722,17 +766,35 @@ pub fn local_context_item(
     source_file: &std::path::Path,
 ) -> PickerItem {
     let mut preview = vec![
-        PreviewLine { label: "Source".into(), value: "kubeconfig".into() },
-        PreviewLine { label: "Context".into(), value: context_name.into() },
-        PreviewLine { label: "Cluster".into(), value: cluster_name.into() },
+        PreviewLine {
+            label: "Source".into(),
+            value: "kubeconfig".into(),
+        },
+        PreviewLine {
+            label: "Context".into(),
+            value: context_name.into(),
+        },
+        PreviewLine {
+            label: "Cluster".into(),
+            value: cluster_name.into(),
+        },
     ];
     if !server.is_empty() {
-        preview.push(PreviewLine { label: "Server".into(), value: server.into() });
+        preview.push(PreviewLine {
+            label: "Server".into(),
+            value: server.into(),
+        });
     }
     if let Some(ns) = namespace {
-        preview.push(PreviewLine { label: "Namespace".into(), value: ns.into() });
+        preview.push(PreviewLine {
+            label: "Namespace".into(),
+            value: ns.into(),
+        });
     }
-    preview.push(PreviewLine { label: "File".into(), value: source_file.display().to_string() });
+    preview.push(PreviewLine {
+        label: "File".into(),
+        value: source_file.display().to_string(),
+    });
 
     PickerItem {
         value: context_name.to_string(),
@@ -746,13 +808,25 @@ pub fn local_context_item(
 /// Build a PickerItem for any provider-discovered cluster/context.
 pub fn provider_context_item(cluster: &crate::providers::ClusterInfo) -> PickerItem {
     let mut preview = vec![
-        PreviewLine { label: "Provider".into(), value: cluster.provider.clone() },
-        PreviewLine { label: "Account".into(), value: cluster.account.clone() },
-        PreviewLine { label: "Cluster".into(), value: cluster.name.clone() },
+        PreviewLine {
+            label: "Provider".into(),
+            value: cluster.provider.clone(),
+        },
+        PreviewLine {
+            label: "Account".into(),
+            value: cluster.account.clone(),
+        },
+        PreviewLine {
+            label: "Cluster".into(),
+            value: cluster.name.clone(),
+        },
     ];
 
     for field in &cluster.metadata {
-        preview.push(PreviewLine { label: field.label.clone(), value: field.value.clone() });
+        preview.push(PreviewLine {
+            label: field.label.clone(),
+            value: field.value.clone(),
+        });
     }
 
     PickerItem {

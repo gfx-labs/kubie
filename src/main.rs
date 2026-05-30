@@ -7,13 +7,13 @@ use clap::Parser;
 use cmd::meta::Kubie;
 use settings::Settings;
 
-mod providers;
 mod cmd;
 mod frecency;
 mod ioutil;
 mod kubeconfig;
 mod kubectl;
 mod picker;
+mod providers;
 mod session;
 mod settings;
 mod shell;

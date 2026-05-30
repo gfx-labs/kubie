@@ -36,13 +36,11 @@ fn get_editor(settings: &Settings) -> Result<EditorCommand> {
         .default_editor
         .as_deref()
         .map(|editor| {
-            parse_editor_command(editor)
-                .with_context(|| format!("unable to parse default_editor command {}", editor))
+            parse_editor_command(editor).with_context(|| format!("unable to parse default_editor command {}", editor))
         })
         .or_else(|| {
             env::var("EDITOR").ok().map(|editor| {
-                parse_editor_command(&editor)
-                    .with_context(|| format!("unable to parse EDITOR command {}", editor))
+                parse_editor_command(&editor).with_context(|| format!("unable to parse EDITOR command {}", editor))
             })
         })
         .transpose()?

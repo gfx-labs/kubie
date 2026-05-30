@@ -96,7 +96,6 @@ pub fn spawn_shell(settings: &Settings, config: KubeConfig, session: &Session) -
         },
     );
 
-
     match kind {
         ShellKind::Bash => {
             env_vars.insert("KUBIE_SHELL", "bash");

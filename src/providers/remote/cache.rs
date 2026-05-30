@@ -146,12 +146,6 @@ pub fn write_config(cluster: &ClusterInfo, content: &str) -> anyhow::Result<Path
 }
 
 /// Find a cluster by its context name.
-pub fn find_cluster_for_context(
-    context_name: &str,
-    clusters: &[ClusterInfo],
-) -> Option<ClusterInfo> {
-    clusters
-        .iter()
-        .find(|c| c.context_name == context_name)
-        .cloned()
+pub fn find_cluster_for_context(context_name: &str, clusters: &[ClusterInfo]) -> Option<ClusterInfo> {
+    clusters.iter().find(|c| c.context_name == context_name).cloned()
 }

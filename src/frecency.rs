@@ -68,10 +68,10 @@ impl FrecencyDb {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let entry = self.entries.entry(key.to_string()).or_insert(Entry {
-            count: 0,
-            last_used: 0,
-        });
+        let entry = self
+            .entries
+            .entry(key.to_string())
+            .or_insert(Entry { count: 0, last_used: 0 });
         entry.count += 1;
         entry.last_used = now;
     }

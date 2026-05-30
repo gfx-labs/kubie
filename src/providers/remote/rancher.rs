@@ -1,9 +1,9 @@
 use anyhow::{bail, Context};
 use serde::Deserialize;
 
-use crate::providers::{ClusterInfo, PreviewField, Provider};
-use crate::providers::config::Secret;
 use super::resources;
+use crate::providers::config::Secret;
+use crate::providers::{ClusterInfo, PreviewField, Provider};
 
 /// Rancher provider configuration.
 ///
@@ -180,11 +180,7 @@ impl Provider for Rancher {
         let response: ClustersResponse =
             serde_json::from_str(&body).context("Failed to parse Rancher clusters response")?;
 
-        let clusters = response
-            .data
-            .into_iter()
-            .map(|c| convert_cluster(account, c))
-            .collect();
+        let clusters = response.data.into_iter().map(|c| convert_cluster(account, c)).collect();
 
         Ok(clusters)
     }
@@ -200,30 +196,16 @@ impl Provider for Rancher {
             .header("Authorization", &format!("Bearer {}", self.token()))
             .header("Content-Type", "application/json")
             .send_empty()
-            .with_context(|| {
-                format!("Failed to generate kubeconfig for cluster {}", cluster.name)
-            })?
+            .with_context(|| format!("Failed to generate kubeconfig for cluster {}", cluster.name))?
             .body_mut()
             .read_to_string()
-            .with_context(|| {
-                format!(
-                    "Failed to read kubeconfig response for cluster {}",
-                    cluster.name
-                )
-            })?;
+            .with_context(|| format!("Failed to read kubeconfig response for cluster {}", cluster.name))?;
 
-        let response: GenerateKubeconfigResponse = serde_json::from_str(&body).with_context(|| {
-            format!(
-                "Failed to parse kubeconfig response for cluster {}",
-                cluster.name
-            )
-        })?;
+        let response: GenerateKubeconfigResponse = serde_json::from_str(&body)
+            .with_context(|| format!("Failed to parse kubeconfig response for cluster {}", cluster.name))?;
 
         if response.config.is_empty() {
-            bail!(
-                "Rancher returned empty kubeconfig for cluster {}",
-                cluster.name
-            );
+            bail!("Rancher returned empty kubeconfig for cluster {}", cluster.name);
         }
 
         Ok(response.config)

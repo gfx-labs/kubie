@@ -1,8 +1,8 @@
 use anyhow::{bail, Context};
 use serde::Deserialize;
 
-use crate::providers::{ClusterInfo, PreviewField, Provider};
 use crate::providers::config::Secret;
+use crate::providers::{ClusterInfo, PreviewField, Provider};
 
 const DO_API_BASE: &str = "https://api.digitalocean.com";
 
@@ -232,28 +232,18 @@ impl Provider for DigitalOcean {
 
     fn get_kubeconfig(&self, cluster: &ClusterInfo) -> anyhow::Result<String> {
         let token = self.token()?;
-        let url = format!(
-            "{DO_API_BASE}/v2/kubernetes/clusters/{}/kubeconfig",
-            cluster.id
-        );
+        let url = format!("{DO_API_BASE}/v2/kubernetes/clusters/{}/kubeconfig", cluster.id);
 
         let body: String = ureq::get(&url)
             .header("Authorization", &format!("Bearer {token}"))
             .call()
-            .with_context(|| {
-                format!("Failed to download kubeconfig for cluster {}", cluster.name)
-            })?
+            .with_context(|| format!("Failed to download kubeconfig for cluster {}", cluster.name))?
             .body_mut()
             .read_to_string()
-            .with_context(|| {
-                format!("Failed to read kubeconfig for cluster {}", cluster.name)
-            })?;
+            .with_context(|| format!("Failed to read kubeconfig for cluster {}", cluster.name))?;
 
         if body.is_empty() {
-            bail!(
-                "DigitalOcean returned empty kubeconfig for cluster {}",
-                cluster.name
-            );
+            bail!("DigitalOcean returned empty kubeconfig for cluster {}", cluster.name);
         }
 
         Ok(body)

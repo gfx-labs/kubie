@@ -98,12 +98,7 @@ fn find_provider_context_name(installed: &Installed, display_name: &str) -> Stri
 /// Returns Some(resolved_name) if confirmed, None if no match or rejected.
 fn fuzzy_resolve_context(query: &str, installed: &Installed) -> Result<Option<String>> {
     let mut matcher = Matcher::new(Config::DEFAULT);
-    let pattern = Pattern::new(
-        query,
-        CaseMatching::Ignore,
-        Normalization::Smart,
-        AtomKind::Fuzzy,
-    );
+    let pattern = Pattern::new(query, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy);
 
     // Score all contexts and collect matches.
     let mut scored: Vec<(&str, u32)> = installed
@@ -114,7 +109,7 @@ fn fuzzy_resolve_context(query: &str, installed: &Installed) -> Result<Option<St
             let mut buf = Vec::new();
             let hay = nucleo_matcher::Utf32Str::new(name, &mut buf);
             let score = pattern.score(hay, &mut matcher)?;
-            Some((name.as_str(), score as u32))
+            Some((name.as_str(), score))
         })
         .collect();
 
@@ -175,10 +170,11 @@ pub fn context(
 
     // When providers are enabled and a context name was given explicitly, check if it's a provider context.
     #[cfg(feature = "remote")]
-    if !local && !settings.providers.entries.is_empty() {
-        if try_provider_context(settings, &context_name, namespace_name.as_deref(), recursive, no_sync)?.is_some() {
-            return Ok(());
-        }
+    if !local
+        && !settings.providers.entries.is_empty()
+        && try_provider_context(settings, &context_name, namespace_name.as_deref(), recursive, no_sync)?.is_some()
+    {
+        return Ok(());
     }
 
     // If exact match exists, use it directly.
@@ -216,7 +212,8 @@ fn context_with_providers(
         let prov = providers::config::build_providers(&settings.providers, None);
         providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
 
-        let config_file = providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
+        let config_file =
+            providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
 
         // Load the provider kubeconfig + normal configs into memory, then clean up the temp file.
         let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
@@ -253,14 +250,18 @@ fn try_provider_context(
     let prov = providers::config::build_providers(&settings.providers, None);
 
     let mut clusters = providers::remote::cache::load_metadata()?.unwrap_or_default();
-    if providers::remote::cache::find_cluster_for_context(context_name, &clusters).is_none() && !no_sync && !prov.is_empty() {
+    if providers::remote::cache::find_cluster_for_context(context_name, &clusters).is_none()
+        && !no_sync
+        && !prov.is_empty()
+    {
         clusters = providers::remote::sync::full_sync(&prov)?;
     }
 
     if let Some(cluster) = providers::remote::cache::find_cluster_for_context(context_name, &clusters) {
         providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
 
-        let config_file = providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
+        let config_file =
+            providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
 
         let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
         let normal_paths = settings.get_kube_configs_paths()?;

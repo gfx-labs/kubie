@@ -5,13 +5,13 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
+use super::kubeconfig::{KubeConfigProvider, KubeConfigProviderConfig};
 #[cfg(feature = "remote")]
 use super::remote::digitalocean::{DigitalOcean, DigitalOceanConfig};
 #[cfg(feature = "remote")]
 use super::remote::gke::{Gke, GkeConfig};
 #[cfg(feature = "remote")]
 use super::remote::rancher::{Rancher, RancherConfig};
-use super::kubeconfig::{KubeConfigProvider, KubeConfigProviderConfig};
 use super::NamedProvider;
 
 // ---------------------------------------------------------------------------
@@ -323,8 +323,7 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
 
         match entry.provider_type.as_str() {
             "kubeconfig" => {
-                let cfg: KubeConfigProviderConfig =
-                    serde_yaml::from_value(entry.config.clone()).unwrap_or_default();
+                let cfg: KubeConfigProviderConfig = serde_yaml::from_value(entry.config.clone()).unwrap_or_default();
                 let mut provider = KubeConfigProvider::new(cfg);
                 if let Some(path) = kubie_config_path {
                     provider.exclude(path.to_string());
@@ -333,8 +332,7 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
             }
             #[cfg(feature = "remote")]
             "digitalocean" => {
-                let cfg: DigitalOceanConfig =
-                    serde_yaml::from_value(entry.config.clone()).unwrap_or_default();
+                let cfg: DigitalOceanConfig = serde_yaml::from_value(entry.config.clone()).unwrap_or_default();
                 providers.push((name.clone(), Box::new(DigitalOcean::new(cfg))));
             }
             #[cfg(feature = "remote")]
@@ -435,10 +433,7 @@ mod tests {
     #[test]
     fn expand_command_with_env() {
         unsafe { set_var("KUBIE_TEST_PREFIX", "bearer") };
-        assert_eq!(
-            expand("${KUBIE_TEST_PREFIX} $(echo secret)"),
-            "bearer secret"
-        );
+        assert_eq!(expand("${KUBIE_TEST_PREFIX} $(echo secret)"), "bearer secret");
         unsafe { remove_var("KUBIE_TEST_PREFIX") };
     }
 

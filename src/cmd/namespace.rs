@@ -9,12 +9,7 @@ use crate::shell::spawn_shell;
 use crate::state::State;
 use crate::vars;
 
-pub fn namespace(
-    settings: &Settings,
-    namespace_name: Option<String>,
-    recursive: bool,
-    unset: bool,
-) -> Result<()> {
+pub fn namespace(settings: &Settings, namespace_name: Option<String>, recursive: bool, unset: bool) -> Result<()> {
     vars::ensure_kubie_active()?;
 
     let mut session = Session::load().context("Could not load session file")?;

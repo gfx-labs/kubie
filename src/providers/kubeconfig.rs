@@ -79,11 +79,7 @@ impl KubeConfigProvider {
             }
         }
 
-        let all_excludes = self
-            .config
-            .exclude
-            .iter()
-            .chain(self.extra_excludes.iter());
+        let all_excludes = self.config.exclude.iter().chain(self.extra_excludes.iter());
 
         for exc in all_excludes {
             let expanded = expanduser(exc);
@@ -118,12 +114,10 @@ impl Provider for KubeConfigProvider {
                 })
                 .unwrap_or_default();
 
-            let mut metadata = vec![
-                PreviewField {
-                    label: "Cluster".into(),
-                    value: cluster_name.clone(),
-                },
-            ];
+            let mut metadata = vec![PreviewField {
+                label: "Cluster".into(),
+                value: cluster_name.clone(),
+            }];
             if !server.is_empty() {
                 metadata.push(PreviewField {
                     label: "Server".into(),
