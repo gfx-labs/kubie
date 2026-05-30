@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: rm -f .cargo/config.toml
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
@@ -25,6 +26,7 @@ jobs:
           - aarch64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v4
+      - run: rm -f .cargo/config.toml
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -42,9 +44,7 @@ jobs:
         run: cargo build --all-features --target ${{ matrix.target }}
       - name: Build (cross)
         if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: |
-          rm -f .cargo/config.toml
-          cross build --all-features --target ${{ matrix.target }}
+        run: cross build --all-features --target ${{ matrix.target }}
 
   build-macos:
     runs-on: macos-latest
@@ -55,6 +55,7 @@ jobs:
           - aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v4
+      - run: rm -f .cargo/config.toml
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
