@@ -7,7 +7,7 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     steps:
       - uses: actions/checkout@v4
       - run: rm -f .cargo/config.toml
@@ -18,7 +18,7 @@ jobs:
       - run: cargo test --all-features
 
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     strategy:
       matrix:
         target:

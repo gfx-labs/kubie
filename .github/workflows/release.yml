@@ -14,11 +14,11 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
+            os: ubicloud-standard-2
             asset: kubie-linux-amd64
             cross: false
           - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest
+            os: ubicloud-standard-2
             asset: kubie-linux-arm64
             cross: true
           - target: x86_64-apple-darwin
@@ -78,7 +78,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
 
     steps:
       - uses: actions/checkout@v4
