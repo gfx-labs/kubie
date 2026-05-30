@@ -65,3 +65,6 @@ lto = "thin"
 opt-level = "s"
 strip = true
 
+[dev-dependencies]
+strsim = "0.11"
+

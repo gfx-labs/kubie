@@ -91,20 +91,18 @@ fn find_provider_context_name(installed: &Installed, display_name: &str) -> Stri
         .unwrap_or_else(|| display_name.to_string())
 }
 
-/// Fuzzy-match a context name against installed contexts using Jaro-Winkler similarity.
+/// Fuzzy-match a context name against a list of known context names using Jaro-Winkler similarity.
 /// If a close match is found, prompts the user for confirmation.
 /// Returns Some(resolved_name) if confirmed, None if no match or rejected.
-fn fuzzy_resolve_context(query: &str, installed: &Installed) -> Result<Option<String>> {
+fn fuzzy_resolve_context(query: &str, context_names: &[String]) -> Result<Option<String>> {
     const MIN_SIMILARITY: f64 = 0.6;
 
     let query_lower = query.to_lowercase();
 
     // Score every context using Jaro-Winkler (handles typos, transpositions, prefixes).
-    let mut candidates: Vec<(&str, f64)> = installed
-        .contexts
+    let mut candidates: Vec<(&str, f64)> = context_names
         .iter()
-        .map(|ctx| {
-            let name = &ctx.item.name;
+        .map(|name| {
             let name_lower = name.to_lowercase();
 
             // Jaro-Winkler on the full name.
@@ -184,25 +182,60 @@ pub fn context(
         },
     };
 
-    // When providers are enabled and a context name was given explicitly, check if it's a provider context.
+    // Collect all known context names for fuzzy matching (local + provider).
+    let mut all_context_names: Vec<String> = installed.contexts.iter().map(|c| c.item.name.clone()).collect();
+
     #[cfg(feature = "remote")]
-    if !local
-        && !settings.providers.entries.is_empty()
-        && try_provider_context(settings, &context_name, namespace_name.as_deref(), recursive, no_sync)?.is_some()
-    {
-        return Ok(());
+    let provider_clusters = if !local && !settings.providers.entries.is_empty() {
+        let clusters = crate::providers::remote::cache::load_metadata()
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        for c in &clusters {
+            if !all_context_names.contains(&c.context_name) {
+                all_context_names.push(c.context_name.clone());
+            }
+        }
+        clusters
+    } else {
+        Vec::new()
+    };
+
+    // Resolve the context name: exact match first, then fuzzy.
+    let resolved = if installed.find_context_by_name(&context_name).is_some() {
+        context_name.clone()
+    } else {
+        match fuzzy_resolve_context(&context_name, &all_context_names)? {
+            Some(name) => name,
+            None => anyhow::bail!("No context matching '{context_name}'"),
+        }
+    };
+
+    // Check if it's a provider context.
+    #[cfg(feature = "remote")]
+    if !local && !settings.providers.entries.is_empty() {
+        if let Some(cluster) = crate::providers::remote::cache::find_cluster_for_context(&resolved, &provider_clusters)
+        {
+            let prov = crate::providers::config::build_providers(&settings.providers, None);
+            crate::providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
+
+            let config_file = crate::providers::remote::cache::configs_dir()
+                .join(crate::providers::remote::cache::config_filename(&cluster));
+
+            let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
+            let normal_paths = settings.get_kube_configs_paths()?;
+            for p in normal_paths {
+                kubeconfigs.push(p.to_string_lossy().to_string());
+            }
+            let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
+            crate::providers::remote::sync::cleanup_config(&config_file);
+
+            let actual_ctx = find_provider_context_name(&installed, &resolved);
+            return enter_context(settings, installed, &actual_ctx, namespace_name.as_deref(), recursive);
+        }
     }
 
-    // If exact match exists, use it directly.
-    if installed.find_context_by_name(&context_name).is_some() {
-        return enter_context(settings, installed, &context_name, namespace_name.as_deref(), recursive);
-    }
-
-    // No exact match -- try fuzzy matching.
-    match fuzzy_resolve_context(&context_name, &installed)? {
-        Some(resolved) => enter_context(settings, installed, &resolved, namespace_name.as_deref(), recursive),
-        None => anyhow::bail!("No context matching '{context_name}'"),
-    }
+    enter_context(settings, installed, &resolved, namespace_name.as_deref(), recursive)
 }
 
 /// Handle context switching through the provider-aware picker.
@@ -249,48 +282,4 @@ fn context_with_providers(
     // It's a local kubeconfig context.
     let installed = kubeconfig::get_installed_contexts(settings)?;
     enter_context(settings, installed, ctx_name, namespace_name.as_deref(), recursive)
-}
-
-/// Try to handle a named context as a provider-discovered context.
-/// Returns Ok(Some(())) if handled, Ok(None) if not a provider context.
-#[cfg(feature = "remote")]
-fn try_provider_context(
-    settings: &Settings,
-    context_name: &str,
-    namespace_name: Option<&str>,
-    recursive: bool,
-    no_sync: bool,
-) -> Result<Option<()>> {
-    use crate::providers;
-
-    let prov = providers::config::build_providers(&settings.providers, None);
-
-    let mut clusters = providers::remote::cache::load_metadata()?.unwrap_or_default();
-    if providers::remote::cache::find_cluster_for_context(context_name, &clusters).is_none()
-        && !no_sync
-        && !prov.is_empty()
-    {
-        clusters = providers::remote::sync::full_sync(&prov)?;
-    }
-
-    if let Some(cluster) = providers::remote::cache::find_cluster_for_context(context_name, &clusters) {
-        providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
-
-        let config_file =
-            providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
-
-        let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
-        let normal_paths = settings.get_kube_configs_paths()?;
-        for p in normal_paths {
-            kubeconfigs.push(p.to_string_lossy().to_string());
-        }
-        let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
-        providers::remote::sync::cleanup_config(&config_file);
-
-        let actual_ctx = find_provider_context_name(&installed, context_name);
-        enter_context(settings, installed, &actual_ctx, namespace_name, recursive)?;
-        return Ok(Some(()));
-    }
-
-    Ok(None)
 }

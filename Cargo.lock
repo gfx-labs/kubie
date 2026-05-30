@@ -1060,7 +1060,7 @@ dependencies = [
 
 [[package]]
 name = "kubie"
-version = "2026.5.0"
+version = "2026.5.1"
 dependencies = [
  "anyhow",
  "attohttpc",
