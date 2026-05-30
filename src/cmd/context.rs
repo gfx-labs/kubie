@@ -1,8 +1,6 @@
-use std::io::{self, Write};
-
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use crossterm::terminal;
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::FuzzySelect;
 
 use crate::cmd::{select_or_list_context, SelectResult};
 use crate::kubeconfig::{self, Installed};
@@ -93,31 +91,27 @@ fn find_provider_context_name(installed: &Installed, display_name: &str) -> Stri
         .unwrap_or_else(|| display_name.to_string())
 }
 
-/// Fuzzy-match a context name against a list of known context names using Jaro-Winkler similarity.
-/// If a close match is found, prompts the user for confirmation.
-/// Returns Some(resolved_name) if confirmed, None if no match or rejected.
+/// Fuzzy-match a context name against a list of known context names.
+/// Shows a fuzzy-searchable selector pre-filled with the query.
+/// Returns Some(resolved_name) if selected, None if cancelled.
 fn fuzzy_resolve_context(query: &str, context_names: &[String]) -> Result<Option<String>> {
     const MIN_SIMILARITY: f64 = 0.6;
 
     let query_lower = query.to_lowercase();
 
-    // Score every context using Jaro-Winkler (handles typos, transpositions, prefixes).
+    // Pre-filter to reasonable candidates using Jaro-Winkler.
     let mut candidates: Vec<(&str, f64)> = context_names
         .iter()
         .map(|name| {
             let name_lower = name.to_lowercase();
-
-            // Jaro-Winkler on the full name.
             let jw = strsim::jaro_winkler(&query_lower, &name_lower);
 
-            // Bonus: if the query is a substring (or vice versa), boost the score.
             let substring_bonus = if name_lower.contains(&query_lower) || query_lower.contains(&name_lower) {
                 0.15
             } else {
                 0.0
             };
 
-            // Bonus: check individual segments (split on - and _).
             let query_parts: Vec<&str> = query_lower.split(['-', '_']).filter(|s| !s.is_empty()).collect();
             let total_parts = query_parts.len().max(1);
             let matching_parts = query_parts.iter().filter(|part| name_lower.contains(*part)).count();
@@ -133,81 +127,17 @@ fn fuzzy_resolve_context(query: &str, context_names: &[String]) -> Result<Option
         return Ok(None);
     }
 
-    // Sort by score descending, take top matches.
     candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    let max_shown = 5;
-    let choices: Vec<&str> = candidates.iter().take(max_shown).map(|(name, _)| *name).collect();
+    let items: Vec<&str> = candidates.iter().map(|(name, _)| *name).collect();
 
-    // Single match -- simple y/n prompt.
-    if choices.len() == 1 {
-        eprint!("did you mean \x1b[1;36m{}\x1b[0m? [Y/n] ", choices[0]);
-        io::stderr().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let input = input.trim().to_lowercase();
-        return if input.is_empty() || input == "y" || input == "yes" {
-            Ok(Some(choices[0].to_string()))
-        } else {
-            Ok(None)
-        };
-    }
+    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        .with_prompt("did you mean")
+        .items(&items)
+        .default(0)
+        .with_initial_text(query)
+        .interact_opt()?;
 
-    // Multiple matches -- inline selector with arrow keys.
-    inline_select(&choices)
-}
-
-/// Show a small inline selector on stderr. Arrow keys to navigate, Enter to confirm, Esc to cancel.
-fn inline_select(choices: &[&str]) -> Result<Option<String>> {
-    let mut selected: usize = 0;
-
-    // Draw initial list.
-    draw_choices(choices, selected);
-
-    terminal::enable_raw_mode()?;
-    let result = loop {
-        if let Event::Key(key) = event::read()? {
-            if key.kind != KeyEventKind::Press {
-                continue;
-            }
-            match key.code {
-                KeyCode::Up | KeyCode::Char('k') => {
-                    selected = selected.saturating_sub(1);
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if selected < choices.len().saturating_sub(1) {
-                        selected += 1;
-                    }
-                }
-                KeyCode::Enter => break Some(choices[selected].to_string()),
-                KeyCode::Esc | KeyCode::Char('q') => break None,
-                _ => {}
-            }
-            // Redraw: move cursor up to overwrite previous output.
-            eprint!("\x1b[{}A", choices.len());
-            draw_choices(choices, selected);
-        }
-    };
-    terminal::disable_raw_mode()?;
-
-    // Clear the menu after selection.
-    eprint!("\x1b[{}A", choices.len());
-    for _ in choices {
-        eprint!("\x1b[2K\r\n");
-    }
-    eprint!("\x1b[{}A", choices.len());
-
-    Ok(result)
-}
-
-fn draw_choices(choices: &[&str], selected: usize) {
-    for (i, name) in choices.iter().enumerate() {
-        if i == selected {
-            eprintln!("\x1b[1;36m  > {name}\x1b[0m");
-        } else {
-            eprintln!("    {name}");
-        }
-    }
-    io::stderr().flush().ok();
+    Ok(selection.map(|i| items[i].to_string()))
 }
 
 pub fn context(

@@ -40,6 +40,7 @@ wildmatch = "2"
 # Remote provider dependencies (optional, behind "remote" feature)
 colored = { version = "3", optional = true }
 ureq = { version = "3", optional = true }
+dialoguer = { version = "0.12.0", features = ["fuzzy-select"] }
 
 [target.arm-unknown-linux-musleabi.dependencies]
 aws-lc-rs = { version = "1.16", default-features = false, features = [
