@@ -1,8 +1,6 @@
 use std::io::{self, Write};
 
 use anyhow::Result;
-use nucleo_matcher::pattern::{AtomKind, CaseMatching, Normalization, Pattern};
-use nucleo_matcher::{Config, Matcher};
 
 use crate::cmd::{select_or_list_context, SelectResult};
 use crate::kubeconfig::{self, Installed};
@@ -93,75 +91,50 @@ fn find_provider_context_name(installed: &Installed, display_name: &str) -> Stri
         .unwrap_or_else(|| display_name.to_string())
 }
 
-/// Fuzzy-match a context name against installed contexts.
+/// Fuzzy-match a context name against installed contexts using Jaro-Winkler similarity.
 /// If a close match is found, prompts the user for confirmation.
 /// Returns Some(resolved_name) if confirmed, None if no match or rejected.
 fn fuzzy_resolve_context(query: &str, installed: &Installed) -> Result<Option<String>> {
+    const MIN_SIMILARITY: f64 = 0.6;
+
     let query_lower = query.to_lowercase();
 
-    // First pass: substring containment (either direction).
-    let mut candidates: Vec<(&str, u32)> = installed
+    // Score every context using Jaro-Winkler (handles typos, transpositions, prefixes).
+    let mut candidates: Vec<(&str, f64)> = installed
         .contexts
         .iter()
-        .filter_map(|ctx| {
+        .map(|ctx| {
             let name = &ctx.item.name;
             let name_lower = name.to_lowercase();
-            if name_lower.contains(&query_lower) || query_lower.contains(&name_lower) {
-                // Score by how close the lengths are (shorter difference = better match).
-                let diff = name.len().abs_diff(query.len()) as u32;
-                Some((name.as_str(), 1000u32.saturating_sub(diff)))
+
+            // Jaro-Winkler on the full name.
+            let jw = strsim::jaro_winkler(&query_lower, &name_lower);
+
+            // Bonus: if the query is a substring (or vice versa), boost the score.
+            let substring_bonus = if name_lower.contains(&query_lower) || query_lower.contains(&name_lower) {
+                0.15
             } else {
-                None
-            }
+                0.0
+            };
+
+            // Bonus: check individual segments (split on - and _).
+            let query_parts: Vec<&str> = query_lower.split(['-', '_']).filter(|s| !s.is_empty()).collect();
+            let total_parts = query_parts.len().max(1);
+            let matching_parts = query_parts.iter().filter(|part| name_lower.contains(*part)).count();
+            let segment_bonus = (matching_parts as f64 / total_parts as f64) * 0.1;
+
+            let score = (jw + substring_bonus + segment_bonus).min(1.0);
+            (name.as_str(), score)
         })
+        .filter(|(_, score)| *score >= MIN_SIMILARITY)
         .collect();
-
-    // Second pass: nucleo fuzzy matching for typos/transpositions.
-    if candidates.is_empty() {
-        let mut matcher = Matcher::new(Config::DEFAULT);
-        let pattern = Pattern::new(query, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy);
-
-        candidates = installed
-            .contexts
-            .iter()
-            .filter_map(|ctx| {
-                let name = &ctx.item.name;
-                let mut buf = Vec::new();
-                let hay = nucleo_matcher::Utf32Str::new(name, &mut buf);
-                let score = pattern.score(hay, &mut matcher)?;
-                Some((name.as_str(), score))
-            })
-            .collect();
-    }
-
-    // Third pass: match individual segments split by '-' or '_'.
-    if candidates.is_empty() {
-        let query_parts: Vec<&str> = query_lower.split(['-', '_']).collect();
-        candidates = installed
-            .contexts
-            .iter()
-            .filter_map(|ctx| {
-                let name = &ctx.item.name;
-                let name_lower = name.to_lowercase();
-                let matching_parts = query_parts
-                    .iter()
-                    .filter(|part| !part.is_empty() && name_lower.contains(*part))
-                    .count();
-                if matching_parts > 0 {
-                    Some((name.as_str(), matching_parts as u32 * 100))
-                } else {
-                    None
-                }
-            })
-            .collect();
-    }
 
     if candidates.is_empty() {
         return Ok(None);
     }
 
     // Sort by score descending.
-    candidates.sort_by_key(|b| std::cmp::Reverse(b.1));
+    candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let best = candidates[0].0;
 
