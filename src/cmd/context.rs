@@ -1,6 +1,8 @@
 use std::io::{self, Write};
 
 use anyhow::Result;
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::terminal;
 
 use crate::cmd::{select_or_list_context, SelectResult};
 use crate::kubeconfig::{self, Installed};
@@ -131,24 +133,81 @@ fn fuzzy_resolve_context(query: &str, context_names: &[String]) -> Result<Option
         return Ok(None);
     }
 
-    // Sort by score descending.
+    // Sort by score descending, take top matches.
     candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let max_shown = 5;
+    let choices: Vec<&str> = candidates.iter().take(max_shown).map(|(name, _)| *name).collect();
 
-    let best = candidates[0].0;
-
-    // Prompt user for confirmation.
-    eprint!("did you mean \x1b[1;36m{best}\x1b[0m? [Y/n] ");
-    io::stderr().flush()?;
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    let input = input.trim().to_lowercase();
-
-    if input.is_empty() || input == "y" || input == "yes" {
-        Ok(Some(best.to_string()))
-    } else {
-        Ok(None)
+    // Single match -- simple y/n prompt.
+    if choices.len() == 1 {
+        eprint!("did you mean \x1b[1;36m{}\x1b[0m? [Y/n] ", choices[0]);
+        io::stderr().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let input = input.trim().to_lowercase();
+        return if input.is_empty() || input == "y" || input == "yes" {
+            Ok(Some(choices[0].to_string()))
+        } else {
+            Ok(None)
+        };
     }
+
+    // Multiple matches -- inline selector with arrow keys.
+    inline_select(&choices)
+}
+
+/// Show a small inline selector on stderr. Arrow keys to navigate, Enter to confirm, Esc to cancel.
+fn inline_select(choices: &[&str]) -> Result<Option<String>> {
+    let mut selected: usize = 0;
+
+    // Draw initial list.
+    draw_choices(choices, selected);
+
+    terminal::enable_raw_mode()?;
+    let result = loop {
+        if let Event::Key(key) = event::read()? {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    selected = selected.saturating_sub(1);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if selected < choices.len().saturating_sub(1) {
+                        selected += 1;
+                    }
+                }
+                KeyCode::Enter => break Some(choices[selected].to_string()),
+                KeyCode::Esc | KeyCode::Char('q') => break None,
+                _ => {}
+            }
+            // Redraw: move cursor up to overwrite previous output.
+            eprint!("\x1b[{}A", choices.len());
+            draw_choices(choices, selected);
+        }
+    };
+    terminal::disable_raw_mode()?;
+
+    // Clear the menu after selection.
+    eprint!("\x1b[{}A", choices.len());
+    for _ in choices {
+        eprint!("\x1b[2K\r\n");
+    }
+    eprint!("\x1b[{}A", choices.len());
+
+    Ok(result)
+}
+
+fn draw_choices(choices: &[&str], selected: usize) {
+    for (i, name) in choices.iter().enumerate() {
+        if i == selected {
+            eprintln!("\x1b[1;36m  > {name}\x1b[0m");
+        } else {
+            eprintln!("    {name}");
+        }
+    }
+    io::stderr().flush().ok();
 }
 
 pub fn context(
