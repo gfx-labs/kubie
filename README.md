@@ -309,5 +309,6 @@ cargo build --release --no-default-features
 ```
 
 ## Future plans
+* Transparent loading of PGP-encrypted kubeconfig files (`.yaml.gpg`, `.yml.gpg`)
 * Additional provider backends (EKS, AKS, etc.)
 * Heuristic-based namespace pre-selection
