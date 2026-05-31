@@ -280,7 +280,7 @@ where
             continue;
         }
 
-        let kubeconfig: Result<KubeConfig> = ioutil::read_yaml(path);
+        let kubeconfig: Result<KubeConfig> = load_kubeconfig_file(path);
 
         match kubeconfig {
             Ok(mut kubeconfig) => {
@@ -302,6 +302,86 @@ where
     }
 
     Ok(installed)
+}
+
+/// Load a single kubeconfig file, transparently decrypting if it has a
+/// `.gpg` or `.age` extension.
+fn load_kubeconfig_file(path: &Path) -> Result<KubeConfig> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+    match ext {
+        "gpg" => {
+            let content = decrypt_gpg(path)?;
+            serde_yaml::from_str(&content)
+                .with_context(|| format!("Failed to parse decrypted kubeconfig {}", path.display()))
+        }
+        "age" => {
+            let content = decrypt_age(path)?;
+            serde_yaml::from_str(&content)
+                .with_context(|| format!("Failed to parse decrypted kubeconfig {}", path.display()))
+        }
+        _ => ioutil::read_yaml(path),
+    }
+}
+
+/// Decrypt a GPG-encrypted file. Uses gpg-agent for passphrase caching.
+fn decrypt_gpg(path: &Path) -> Result<String> {
+    use std::process::{Command, Stdio};
+
+    let output = Command::new("gpg")
+        .args(["--quiet", "--decrypt"])
+        .arg(path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .with_context(|| format!("Failed to run gpg to decrypt {}", path.display()))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("gpg decrypt failed for {}: {}", path.display(), stderr.trim());
+    }
+
+    String::from_utf8(output.stdout)
+        .with_context(|| format!("Decrypted content of {} is not valid UTF-8", path.display()))
+}
+
+/// Decrypt an age-encrypted file. Tries the default age identity at
+/// ~/.config/age/keys.txt, or falls back to prompting for a passphrase.
+fn decrypt_age(path: &Path) -> Result<String> {
+    use std::process::{Command, Stdio};
+
+    // Try identity-based decryption first.
+    let identity_path = dirs::config_dir()
+        .map(|d| d.join("age").join("keys.txt"))
+        .unwrap_or_default();
+
+    let output = if identity_path.exists() {
+        Command::new("age")
+            .args(["--decrypt", "--identity"])
+            .arg(&identity_path)
+            .arg(path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| format!("Failed to run age to decrypt {}", path.display()))?
+    } else {
+        // Passphrase-based (age -d -p): age will prompt on the terminal.
+        Command::new("age")
+            .args(["--decrypt"])
+            .arg(path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| format!("Failed to run age to decrypt {}", path.display()))?
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("age decrypt failed for {}: {}", path.display(), stderr.trim());
+    }
+
+    String::from_utf8(output.stdout)
+        .with_context(|| format!("Decrypted content of {} is not valid UTF-8", path.display()))
 }
 
 pub fn get_installed_contexts(settings: &Settings) -> Result<Installed> {

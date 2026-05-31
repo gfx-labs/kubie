@@ -207,10 +207,22 @@ fn default_include_path() -> Vec<String> {
         format!("{home_dir}/.kube/config"),
         format!("{home_dir}/.kube/*.yml"),
         format!("{home_dir}/.kube/*.yaml"),
+        format!("{home_dir}/.kube/*.yml.gpg"),
+        format!("{home_dir}/.kube/*.yaml.gpg"),
+        format!("{home_dir}/.kube/*.yml.age"),
+        format!("{home_dir}/.kube/*.yaml.age"),
         format!("{home_dir}/.kube/configs/*.yml"),
         format!("{home_dir}/.kube/configs/*.yaml"),
+        format!("{home_dir}/.kube/configs/*.yml.gpg"),
+        format!("{home_dir}/.kube/configs/*.yaml.gpg"),
+        format!("{home_dir}/.kube/configs/*.yml.age"),
+        format!("{home_dir}/.kube/configs/*.yaml.age"),
         format!("{home_dir}/.kube/kubie/*.yml"),
         format!("{home_dir}/.kube/kubie/*.yaml"),
+        format!("{home_dir}/.kube/kubie/*.yml.gpg"),
+        format!("{home_dir}/.kube/kubie/*.yaml.gpg"),
+        format!("{home_dir}/.kube/kubie/*.yml.age"),
+        format!("{home_dir}/.kube/kubie/*.yaml.age"),
     ]
 }
 
