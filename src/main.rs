@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     let settings = Settings::load()?;
 
     #[cfg(feature = "remote")]
-    providers::remote::cache::init(settings.encryption.gpg_key.clone());
+    providers::remote::cache::init();
 
     let kubie = Kubie::parse();
 

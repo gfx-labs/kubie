@@ -1,5 +1,3 @@
-use std::fs;
-
 use anyhow::Result;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::FuzzySelect;
@@ -210,16 +208,16 @@ pub fn context(
             let prov = crate::providers::config::build_providers(&settings.providers, None);
             crate::providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
 
-            let tmp_path = crate::providers::remote::cache::decrypted_config_path(&cluster)?
-                .ok_or_else(|| anyhow::anyhow!("Cached kubeconfig not found for {}", cluster.name))?;
+            let config_file = crate::providers::remote::cache::configs_dir()
+                .join(crate::providers::remote::cache::config_filename(&cluster));
 
-            let mut kubeconfigs = vec![tmp_path.to_string_lossy().to_string()];
+            let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
             let normal_paths = settings.get_kube_configs_paths()?;
             for p in normal_paths {
                 kubeconfigs.push(p.to_string_lossy().to_string());
             }
             let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
-            let _ = fs::remove_file(&tmp_path);
+            crate::providers::remote::sync::cleanup_config(&config_file);
 
             let actual_ctx = find_provider_context_name(&installed, &resolved);
             return enter_context(settings, installed, &actual_ctx, namespace_name.as_deref(), recursive);
@@ -252,16 +250,17 @@ fn context_with_providers(
         let prov = providers::config::build_providers(&settings.providers, None);
         providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
 
-        let tmp_path = providers::remote::cache::decrypted_config_path(&cluster)?
-            .ok_or_else(|| anyhow::anyhow!("Cached kubeconfig not found for {}", cluster.name))?;
+        let config_file =
+            providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
 
-        let mut kubeconfigs = vec![tmp_path.to_string_lossy().to_string()];
+        // Load the provider kubeconfig + normal configs into memory, then clean up the temp file.
+        let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
         let normal_paths = settings.get_kube_configs_paths()?;
         for p in normal_paths {
             kubeconfigs.push(p.to_string_lossy().to_string());
         }
         let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
-        let _ = fs::remove_file(&tmp_path);
+        providers::remote::sync::cleanup_config(&config_file);
 
         // The context name inside the downloaded kubeconfig may differ from our
         // display name. Find the actual context name from the file we just loaded.

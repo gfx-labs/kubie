@@ -89,17 +89,6 @@ fn def_preview_min() -> u16 {
     80
 }
 
-/// Encryption settings for cached kubeconfigs at rest.
-#[derive(Debug, Default, Deserialize)]
-pub struct Encryption {
-    /// GPG key ID or email to encrypt cached kubeconfigs with.
-    /// When set, cached kubeconfigs are encrypted at rest using GPG.
-    /// The gpg-agent handles passphrase caching (enter once per session).
-    /// If unset, kubeconfigs are stored in plaintext (default).
-    #[serde(default)]
-    pub gpg_key: Option<String>,
-}
-
 #[derive(Debug, Default, Deserialize)]
 pub struct Settings {
     #[serde(default)]
@@ -120,9 +109,6 @@ pub struct Settings {
     /// TUI picker configuration.
     #[serde(default)]
     pub picker: Picker,
-    /// Encryption settings for cached kubeconfigs.
-    #[serde(default)]
-    pub encryption: Encryption,
     /// Provider configuration for discovering clusters and kubeconfigs.
     #[serde(default)]
     pub providers: crate::providers::config::ProvidersConfig,

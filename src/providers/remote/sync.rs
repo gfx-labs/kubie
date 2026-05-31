@@ -77,8 +77,7 @@ pub fn ensure_hydrated(cluster: &ClusterInfo, providers: &[NamedProvider]) -> an
     Ok(())
 }
 
-/// Hydrate all cached clusters and return paths to decrypted kubeconfig files.
-/// Returned paths are temporary files that the caller should clean up.
+/// Hydrate all cached clusters and return paths to their kubeconfig files.
 pub fn hydrate_all_configs(clusters: &[ClusterInfo], providers: &[NamedProvider]) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for cluster in clusters {
@@ -89,16 +88,16 @@ pub fn hydrate_all_configs(clusters: &[ClusterInfo], providers: &[NamedProvider]
             );
             continue;
         }
-        match cache::decrypted_config_path(cluster) {
-            Ok(Some(path)) => paths.push(path),
-            Ok(None) => {}
-            Err(e) => {
-                eprintln!(
-                    "{}",
-                    format!("Warning: failed to read {}: {e}", cluster.context_name).yellow()
-                );
-            }
+        let filename = cache::config_filename(cluster);
+        let path = cache::configs_dir().join(&filename);
+        if path.exists() {
+            paths.push(path);
         }
     }
     paths
+}
+
+/// Delete an ephemeral kubeconfig file after it has been consumed.
+pub fn cleanup_config(path: &std::path::Path) {
+    let _ = std::fs::remove_file(path);
 }
