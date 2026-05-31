@@ -309,6 +309,5 @@ cargo build --release --no-default-features
 ```
 
 ## Future plans
-* PGP encryption for kubeconfig files stored on disk
 * Additional provider backends (EKS, AKS, etc.)
 * Heuristic-based namespace pre-selection
