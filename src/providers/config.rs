@@ -15,6 +15,8 @@ use super::remote::eks::{Eks, EksConfig};
 #[cfg(feature = "remote")]
 use super::remote::gke::{Gke, GkeConfig};
 #[cfg(feature = "remote")]
+use super::remote::linode::{Linode, LinodeConfig};
+#[cfg(feature = "remote")]
 use super::remote::rancher::{Rancher, RancherConfig};
 use super::NamedProvider;
 
@@ -373,6 +375,15 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
                 }
                 Err(e) => {
                     eprintln!("Warning: failed to parse aks config for '{name}': {e}");
+                }
+            },
+            #[cfg(feature = "remote")]
+            "linode" => match serde_yaml::from_value::<LinodeConfig>(entry.config.clone()) {
+                Ok(cfg) => {
+                    providers.push((name.clone(), Box::new(Linode::new(cfg))));
+                }
+                Err(e) => {
+                    eprintln!("Warning: failed to parse linode config for '{name}': {e}");
                 }
             },
             other => {

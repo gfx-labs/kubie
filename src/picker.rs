@@ -564,6 +564,7 @@ fn source_color(source: &str) -> Color {
         "gke" => Color::Cyan,
         "eks" => Color::Yellow,
         "aks" => Color::LightBlue,
+        "linode" => Color::LightGreen,
         "rancher" => Color::Green,
         "kubeconfig" => Color::DarkGray,
         _ => Color::Magenta,

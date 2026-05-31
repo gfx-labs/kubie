@@ -15,6 +15,7 @@ version = "2026.5.3"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 clap = { version = "4.5.60", features = ["derive"] }
 clap_complete = "4.6.0"
 cfg-if = "1"

@@ -3,6 +3,7 @@ pub mod cache;
 pub mod digitalocean;
 pub mod eks;
 pub mod gke;
+pub mod linode;
 pub mod picker;
 pub mod rancher;
 pub mod resources;
