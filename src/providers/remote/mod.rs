@@ -1,5 +1,7 @@
+pub mod aks;
 pub mod cache;
 pub mod digitalocean;
+pub mod eks;
 pub mod gke;
 pub mod picker;
 pub mod rancher;

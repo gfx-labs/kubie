@@ -561,9 +561,12 @@ fn render_preview(frame: &mut Frame, state: &PickerState, area: Rect) {
 fn source_color(source: &str) -> Color {
     match source {
         "digitalocean" => Color::Blue,
+        "gke" => Color::Cyan,
+        "eks" => Color::Yellow,
+        "aks" => Color::LightBlue,
         "rancher" => Color::Green,
         "kubeconfig" => Color::DarkGray,
-        _ => Color::Yellow,
+        _ => Color::Magenta,
     }
 }
 

@@ -7,7 +7,11 @@ use serde::Deserialize;
 
 use super::kubeconfig::{KubeConfigProvider, KubeConfigProviderConfig};
 #[cfg(feature = "remote")]
+use super::remote::aks::{Aks, AksConfig};
+#[cfg(feature = "remote")]
 use super::remote::digitalocean::{DigitalOcean, DigitalOceanConfig};
+#[cfg(feature = "remote")]
+use super::remote::eks::{Eks, EksConfig};
 #[cfg(feature = "remote")]
 use super::remote::gke::{Gke, GkeConfig};
 #[cfg(feature = "remote")]
@@ -351,6 +355,24 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
                 }
                 Err(e) => {
                     eprintln!("Warning: failed to parse rancher config for '{name}': {e}");
+                }
+            },
+            #[cfg(feature = "remote")]
+            "eks" => match serde_yaml::from_value::<EksConfig>(entry.config.clone()) {
+                Ok(cfg) => {
+                    providers.push((name.clone(), Box::new(Eks::new(cfg))));
+                }
+                Err(e) => {
+                    eprintln!("Warning: failed to parse eks config for '{name}': {e}");
+                }
+            },
+            #[cfg(feature = "remote")]
+            "aks" => match serde_yaml::from_value::<AksConfig>(entry.config.clone()) {
+                Ok(cfg) => {
+                    providers.push((name.clone(), Box::new(Aks::new(cfg))));
+                }
+                Err(e) => {
+                    eprintln!("Warning: failed to parse aks config for '{name}': {e}");
                 }
             },
             other => {
