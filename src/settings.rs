@@ -115,8 +115,31 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn path() -> String {
+    /// Legacy config path.
+    fn legacy_path() -> String {
         format!("{}/.kube/kubie.yaml", home_dir())
+    }
+
+    /// Resolve the config file path. Checks in order:
+    /// 1. `$KUBIE_CONFIG` environment variable
+    /// 2. `$XDG_CONFIG_HOME/kubie/kubie.yaml`
+    /// 3. `~/.config/kubie/kubie.yaml`
+    /// 4. `~/.kube/kubie.yaml` (legacy)
+    pub fn path() -> String {
+        if let Ok(p) = std::env::var("KUBIE_CONFIG") {
+            if Path::new(&p).exists() {
+                return p;
+            }
+        }
+
+        if let Some(xdg) = dirs::config_dir() {
+            let p = xdg.join("kubie").join("kubie.yaml");
+            if p.exists() {
+                return p.to_string_lossy().to_string();
+            }
+        }
+
+        Self::legacy_path()
     }
 
     pub fn load() -> Result<Settings> {
@@ -131,8 +154,9 @@ impl Settings {
             Settings::default()
         };
 
-        // Very important to exclude kubie's own config file ~/.kube/kubie.yaml from the results.
+        // Exclude both potential config locations from kubeconfig discovery.
         settings.configs.exclude.push(settings_path_str.clone());
+        settings.configs.exclude.push(Self::legacy_path());
 
         // Backwards compatibility: if no kubeconfig provider is explicitly configured,
         // auto-inject one from the legacy `configs:` section.
