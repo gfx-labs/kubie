@@ -166,12 +166,20 @@ pub struct GenerateCompletionCommand {
     pub shell: Option<Shell>,
 }
 
-/// Generate a completion script.
+/// Generate a completion script with dynamic context/namespace completion.
 pub fn generate_completion(command: GenerateCompletionCommand) {
-    let mut app = Kubie::command();
-    let bin_name = env!("CARGO_BIN_NAME");
     let shell = determine_shell(command);
-    generate(shell, &mut app, bin_name, &mut std::io::stdout());
+    match shell {
+        Shell::Zsh => print!("{}", include_str!("../../completion/kubie.zsh")),
+        Shell::Bash => print!("{}", include_str!("../../completion/kubie.bash")),
+        Shell::Fish => print!("{}", include_str!("../../completion/kubie.fish")),
+        _ => {
+            // Fall back to clap's static completions for other shells.
+            let mut app = Kubie::command();
+            let bin_name = env!("CARGO_BIN_NAME");
+            generate(shell, &mut app, bin_name, &mut std::io::stdout());
+        }
+    }
 }
 
 fn determine_shell(command: GenerateCompletionCommand) -> Shell {

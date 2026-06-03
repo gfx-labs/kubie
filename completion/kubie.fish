@@ -1,60 +1,49 @@
-set -l commands ctx edit edit-config exec help info lint ns update
+set -l commands ctx ns exec export edit edit-config info lint delete update generate-completion
 
 complete -c kubie --no-files
 
-complete -c kubie \
-    --condition "not __fish_seen_subcommand_from $commands" \
-    --arguments "$commands"
+# Subcommands.
+complete -c kubie -n "not __fish_seen_subcommand_from $commands" -a "$commands"
 
-set -l cmd __fish_seen_subcommand_from
+# ctx: complete with context names.
+complete -c kubie -n "__fish_seen_subcommand_from ctx; and not __fish_seen_subcommand_from (kubie ctx 2>/dev/null)" \
+    -a '(kubie ctx 2>/dev/null)'
+complete -c kubie -n "__fish_seen_subcommand_from ctx" -s n -l namespace -d 'namespace' \
+    -xa '(kubie ns 2>/dev/null)'
+complete -c kubie -n "__fish_seen_subcommand_from ctx" -s f -l kubeconfig -r -d 'kubeconfig file'
+complete -c kubie -n "__fish_seen_subcommand_from ctx" -s r -l recursive -d 'spawn recursive shell'
+complete -c kubie -n "__fish_seen_subcommand_from ctx" -l no-sync -d 'skip provider sync'
+complete -c kubie -n "__fish_seen_subcommand_from ctx" -l local -d 'local contexts only'
+complete -c kubie -n "__fish_seen_subcommand_from ctx" -a '-' -d 'switch to previous context'
 
-complete -c kubie -n "not $cmd exec; or not __kubie_got_two_args" -l help -s h
-complete -c kubie -n "not $cmd $commands" -l version -s V
+# ns: complete with namespace names.
+complete -c kubie -n "__fish_seen_subcommand_from ns" -a '(kubie ns 2>/dev/null)'
+complete -c kubie -n "__fish_seen_subcommand_from ns" -s r -l recursive -d 'spawn recursive shell'
+complete -c kubie -n "__fish_seen_subcommand_from ns" -s u -l unset -d 'unset namespace'
+complete -c kubie -n "__fish_seen_subcommand_from ns" -a '-' -d 'switch to previous namespace'
 
-complete -c kubie -n "$cmd help" -a "$commands"
+# exec: context then namespace.
+complete -c kubie -n "__fish_seen_subcommand_from exec; and __fish_is_nth_token 2" \
+    -a '(kubie ctx 2>/dev/null)'
+complete -c kubie -n "__fish_seen_subcommand_from exec; and __fish_is_nth_token 3" \
+    -a '(kubie ns 2>/dev/null)'
+complete -c kubie -n "__fish_seen_subcommand_from exec" -s e -l exit-early -d 'exit on failure'
+complete -c kubie -n "__fish_seen_subcommand_from exec" -l no-sync -d 'skip provider sync'
+complete -c kubie -n "__fish_seen_subcommand_from exec" -l local -d 'local contexts only'
 
-# FIXME: This should take --kubeconfig into account
-complete -c kubie -n "$cmd ctx delete edit exec; and __kubie_at_arg 1" -d 'context' \
-    -a '(kubie ctx 2> /dev/null)'
+# export: context then namespace.
+complete -c kubie -n "__fish_seen_subcommand_from export; and __fish_is_nth_token 2" \
+    -a '(kubie ctx 2>/dev/null)'
+complete -c kubie -n "__fish_seen_subcommand_from export; and __fish_is_nth_token 3" \
+    -a '(kubie ns 2>/dev/null)'
+complete -c kubie -n "__fish_seen_subcommand_from export" -l no-sync -d 'skip provider sync'
+complete -c kubie -n "__fish_seen_subcommand_from export" -l local -d 'local contexts only'
 
-complete -c kubie -n "$cmd ctx ns" -l recursive -s r -d 'spawn a new recursive shell'
+# edit/delete: complete with context names.
+complete -c kubie -n "__fish_seen_subcommand_from edit delete" -a '(kubie ctx 2>/dev/null)'
 
-complete -c kubie -n "$cmd ctx; and __kubie_at_arg 1" -a '-' -d 'switch back'
-complete -c kubie -n "$cmd ctx" -l kubeconfig -s f -r -d 'load contexts from file'
-complete -c kubie -n "$cmd ctx" -l namespace -s n -d 'namespace' \
-    -xa '(kubie exec -e (__kubie_get_first_arg) default -- kubie ns 2>/dev/null)'
+# info: subcommands.
+complete -c kubie -n "__fish_seen_subcommand_from info" -a "ctx ns depth"
 
-complete -c kubie -n "$cmd exec; and __kubie_at_arg 1" -a '"*"' -d 'exec in all contexts'
-complete -c kubie -n "$cmd exec; and not __kubie_got_two_args" -l exit-early -e
-complete -c kubie -n "$cmd exec; and not __kubie_got_two_args" -l context-headers \
-    -xa "Auto Always Never" -d 'print context?'
-complete -c kubie -n "$cmd exec; and __kubie_at_arg 2" -d 'namespace' \
-    -a '(kubie exec -e (__kubie_get_first_arg) default -- kubie ns 2>/dev/null)'
-complete -c kubie -n "$cmd exec; and __kubie_got_two_args" \
-    -a '(__fish_complete_subcommand --commandline (__kubie_positionals)[4..-1])'
-
-complete -c kubie -n "$cmd info" -a "ctx depth help ns"
-
-complete -c kubie -n "$cmd ns" -l unset -s u
-complete -c kubie -n "$cmd ns" -d 'namespace' -a '(kubie ns 2>/dev/null)'
-complete -c kubie -n "$cmd ns" -a '-' -d 'switch back'
-
-# Strip the cmdline from options and flags, used for ctx and exec completions
-function __kubie_positionals
-    set -l cmd (commandline -poc)[2..-1] (commandline -ct)
-    argparse r/recursive f/kubeconfig= n/namespace= e/exit-early c-context-headers= -- $cmd 2>&1
-    for x in $argv; echo $x; end
-end
-
-function __kubie_get_first_arg
-    # 2 because first elem is subcmd name
-    echo (__kubie_positionals)[2]
-end
-
-function __kubie_at_arg
-    test (count (__kubie_positionals)) = (math $argv[1] + 1)
-end
-
-function __kubie_got_two_args
-    test (count (__kubie_positionals)) -ge 4
-end
+# generate-completion: shell names.
+complete -c kubie -n "__fish_seen_subcommand_from generate-completion" -a "bash zsh fish"
