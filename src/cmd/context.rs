@@ -191,7 +191,7 @@ pub fn context(
     };
 
     // Resolve the context name: exact match first, then fuzzy.
-    let resolved = if installed.find_context_by_name(&context_name).is_some() {
+    let resolved = if all_context_names.iter().any(|n| n == &context_name) {
         context_name.clone()
     } else {
         match fuzzy_resolve_context(&context_name, &all_context_names)? {
