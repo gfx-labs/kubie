@@ -11,7 +11,7 @@ license = "Zlib"
 name = "kubie"
 readme = "README.md"
 repository = "https://github.com/gfx-labs/kubie"
-version = "2026.6.3"
+version = "2026.8.0"
 
 [dependencies]
 anyhow = "1"
@@ -69,4 +69,3 @@ strip = true
 
 [dev-dependencies]
 strsim = "0.11"
-
