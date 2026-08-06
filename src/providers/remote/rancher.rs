@@ -39,7 +39,7 @@ impl Rancher {
         self.config.url.trim_end_matches('/')
     }
 
-    fn token(&self) -> &str {
+    fn token(&self) -> anyhow::Result<&str> {
         self.config.token.value()
     }
 }
@@ -170,7 +170,7 @@ impl Provider for Rancher {
         let url = format!("{}/v3/clusters", self.base_url());
 
         let body: String = ureq::get(&url)
-            .header("Authorization", &format!("Bearer {}", self.token()))
+            .header("Authorization", &format!("Bearer {}", self.token()?))
             .call()
             .context("Failed to call Rancher clusters API")?
             .body_mut()
@@ -193,7 +193,7 @@ impl Provider for Rancher {
         );
 
         let body: String = ureq::post(&url)
-            .header("Authorization", &format!("Bearer {}", self.token()))
+            .header("Authorization", &format!("Bearer {}", self.token()?))
             .header("Content-Type", "application/json")
             .send_empty()
             .with_context(|| format!("Failed to generate kubeconfig for cluster {}", cluster.name))?

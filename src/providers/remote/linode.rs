@@ -40,7 +40,7 @@ impl Linode {
     }
 
     fn token(&self) -> anyhow::Result<&str> {
-        let t = self.config.token.value();
+        let t = self.config.token.value()?;
         if t.is_empty() {
             bail!("Linode token is empty. Set `token` in provider config.");
         }

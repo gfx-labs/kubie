@@ -43,19 +43,25 @@ use super::NamedProvider;
 /// Expansions can be combined: `Bearer $(vault read -field=token secret/k8s)`
 pub struct Secret {
     raw: String,
-    resolved: OnceLock<String>,
+    resolved: OnceLock<Result<String, String>>,
 }
 
 impl Secret {
     /// Get the expanded value. The first call triggers expansion (which may
     /// run shell commands); subsequent calls return the cached result.
-    pub fn value(&self) -> &str {
-        self.resolved.get_or_init(|| expand(&self.raw))
+    pub fn value(&self) -> anyhow::Result<&str> {
+        match self
+            .resolved
+            .get_or_init(|| try_expand(&self.raw).map_err(|error| format!("{error:#}")))
+        {
+            Ok(value) => Ok(value),
+            Err(error) => anyhow::bail!(error.clone()),
+        }
     }
 
     #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.value().is_empty()
+    pub fn is_empty(&self) -> anyhow::Result<bool> {
+        Ok(self.value()?.is_empty())
     }
 }
 
@@ -64,9 +70,9 @@ impl Clone for Secret {
         Secret {
             raw: self.raw.clone(),
             resolved: match self.resolved.get() {
-                Some(v) => {
+                Some(value) => {
                     let lock = OnceLock::new();
-                    let _ = lock.set(v.clone());
+                    let _ = lock.set(value.clone());
                     lock
                 }
                 None => OnceLock::new(),
@@ -83,7 +89,10 @@ impl fmt::Debug for Secret {
 
 impl fmt::Display for Secret {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.value())
+        match self.value() {
+            Ok(value) => f.write_str(value),
+            Err(_) => f.write_str(&self.raw),
+        }
     }
 }
 
@@ -114,7 +123,7 @@ impl Default for Secret {
 // ---------------------------------------------------------------------------
 
 /// Expand `$(cmd)`, `${VAR}`, `${VAR:-default}`, and `$VAR` in a string.
-fn expand(input: &str) -> String {
+fn try_expand(input: &str) -> anyhow::Result<String> {
     let mut result = String::with_capacity(input.len());
     let bytes = input.as_bytes();
     let len = bytes.len();
@@ -126,14 +135,9 @@ fn expand(input: &str) -> String {
             if bytes[i + 1] == b'(' {
                 if let Some(close) = find_matching_paren(input, i + 1) {
                     let cmd_str = &input[i + 2..close];
-                    match run_command(cmd_str) {
-                        Ok(output) => result.push_str(&output),
-                        Err(e) => {
-                            eprintln!("Warning: command substitution failed for $({cmd_str}): {e}");
-                            // Leave unexpanded so the user sees what failed.
-                            result.push_str(&input[i..=close]);
-                        }
-                    }
+                    let output = run_command(cmd_str)
+                        .map_err(|error| anyhow::anyhow!("command substitution failed for $({cmd_str}): {error}"))?;
+                    result.push_str(&output);
                     i = close + 1;
                     continue;
                 }
@@ -184,7 +188,12 @@ fn expand(input: &str) -> String {
         i += input[i..].chars().next().unwrap().len_utf8();
     }
 
-    result
+    Ok(result)
+}
+
+#[cfg(test)]
+fn expand(input: &str) -> String {
+    try_expand(input).unwrap()
 }
 
 /// Find the closing `)` matching the `(` at position `open`, handling nesting
@@ -315,12 +324,36 @@ const SAMPLE_PROVIDERS_CONFIG: &str = r#"# Provider configuration for kubie.
 // Provider construction
 // ---------------------------------------------------------------------------
 
+pub struct BuildProvidersResult {
+    pub providers: Vec<NamedProvider>,
+    pub errors: Vec<ProviderBuildError>,
+}
+
+pub struct ProviderBuildError {
+    pub source: String,
+    pub provider_type: String,
+    pub message: String,
+}
+
 /// Build the list of active providers from config.
 ///
 /// If `kubie_config_path` is provided, it will be added to the exclude list
 /// of any kubeconfig providers (to prevent kubie from loading its own config).
 pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>) -> Vec<NamedProvider> {
+    let result = build_providers_with_errors(config, kubie_config_path);
+    for error in result.errors {
+        eprintln!(
+            "Warning: {} config for '{}' failed: {}",
+            error.provider_type, error.source, error.message
+        );
+    }
+    result.providers
+}
+
+/// Build active providers while retaining configuration failures for a UI caller.
+pub fn build_providers_with_errors(config: &ProvidersConfig, kubie_config_path: Option<&str>) -> BuildProvidersResult {
     let mut providers: Vec<NamedProvider> = Vec::new();
+    let mut errors = Vec::new();
 
     for (name, entry) in &config.entries {
         if !entry.enabled {
@@ -347,7 +380,11 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
                     providers.push((name.clone(), Box::new(Gke::new(cfg))));
                 }
                 Err(e) => {
-                    eprintln!("Warning: failed to parse gke config for '{name}': {e}");
+                    errors.push(ProviderBuildError {
+                        source: name.clone(),
+                        provider_type: "gke".into(),
+                        message: e.to_string(),
+                    });
                 }
             },
             #[cfg(feature = "remote")]
@@ -356,7 +393,11 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
                     providers.push((name.clone(), Box::new(Rancher::new(cfg))));
                 }
                 Err(e) => {
-                    eprintln!("Warning: failed to parse rancher config for '{name}': {e}");
+                    errors.push(ProviderBuildError {
+                        source: name.clone(),
+                        provider_type: "rancher".into(),
+                        message: e.to_string(),
+                    });
                 }
             },
             #[cfg(feature = "remote")]
@@ -365,7 +406,11 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
                     providers.push((name.clone(), Box::new(Eks::new(cfg))));
                 }
                 Err(e) => {
-                    eprintln!("Warning: failed to parse eks config for '{name}': {e}");
+                    errors.push(ProviderBuildError {
+                        source: name.clone(),
+                        provider_type: "eks".into(),
+                        message: e.to_string(),
+                    });
                 }
             },
             #[cfg(feature = "remote")]
@@ -374,7 +419,11 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
                     providers.push((name.clone(), Box::new(Aks::new(cfg))));
                 }
                 Err(e) => {
-                    eprintln!("Warning: failed to parse aks config for '{name}': {e}");
+                    errors.push(ProviderBuildError {
+                        source: name.clone(),
+                        provider_type: "aks".into(),
+                        message: e.to_string(),
+                    });
                 }
             },
             #[cfg(feature = "remote")]
@@ -383,16 +432,24 @@ pub fn build_providers(config: &ProvidersConfig, kubie_config_path: Option<&str>
                     providers.push((name.clone(), Box::new(Linode::new(cfg))));
                 }
                 Err(e) => {
-                    eprintln!("Warning: failed to parse linode config for '{name}': {e}");
+                    errors.push(ProviderBuildError {
+                        source: name.clone(),
+                        provider_type: "linode".into(),
+                        message: e.to_string(),
+                    });
                 }
             },
             other => {
-                eprintln!("Warning: unknown provider type '{other}' for '{name}'");
+                errors.push(ProviderBuildError {
+                    source: name.clone(),
+                    provider_type: other.into(),
+                    message: "unknown provider type".into(),
+                });
             }
         }
     }
 
-    providers
+    BuildProvidersResult { providers, errors }
 }
 
 /// Return the sample providers config text for documentation purposes.
@@ -494,5 +551,39 @@ mod tests {
     #[test]
     fn expand_command_with_escaped_paren() {
         assert_eq!(expand(r"$(echo 'test')"), "test");
+    }
+
+    #[test]
+    fn secret_returns_command_stderr_as_an_error() {
+        let secret = Secret {
+            raw: "$(printf credential-error >&2; exit 7)".into(),
+            resolved: OnceLock::new(),
+        };
+
+        let error = secret.value().unwrap_err().to_string();
+
+        assert!(error.contains("command substitution failed"));
+        assert!(error.contains("credential-error"));
+    }
+
+    #[test]
+    fn provider_build_errors_are_returned_to_ui_callers() {
+        let mut config = ProvidersConfig::default();
+        config.entries.insert(
+            "broken".into(),
+            ProviderEntry {
+                provider_type: "unknown".into(),
+                enabled: true,
+                config: serde_yaml::Value::Null,
+            },
+        );
+
+        let result = build_providers_with_errors(&config, None);
+
+        assert!(result.providers.is_empty());
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].source, "broken");
+        assert_eq!(result.errors[0].provider_type, "unknown");
+        assert_eq!(result.errors[0].message, "unknown provider type");
     }
 }

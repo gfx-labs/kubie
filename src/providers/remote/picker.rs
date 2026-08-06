@@ -35,8 +35,8 @@ pub fn pick_context(
 
     // Add local kubeconfig contexts (excluding provider-discovered ones).
     // Find kubeconfig providers from the config and list their clusters.
-    let local_providers = crate::providers::config::build_providers(providers_config, None);
-    for (name, provider) in &local_providers {
+    let configured = crate::providers::config::build_providers_with_errors(providers_config, None);
+    for (name, provider) in &configured.providers {
         if provider.provider_type() == "kubeconfig" {
             if let Ok(clusters) = provider.list_clusters(name) {
                 for c in clusters {
@@ -51,10 +51,19 @@ pub fn pick_context(
     // Set up background sync channel.
     let rx = if !no_sync && !providers_config.entries.is_empty() {
         let (tx, rx) = mpsc::channel::<PickerUpdate>();
-        let bg_config = crate::providers::config::build_providers(providers_config, None);
+        let bg_config = configured.providers;
+        let config_errors = configured.errors;
         let existing_names: HashSet<String> = items.iter().map(|i| i.value.clone()).collect();
 
         std::thread::spawn(move || {
+            for error in config_errors {
+                let _ = tx.send(PickerUpdate::Error(PickerError {
+                    source: error.source,
+                    provider_type: error.provider_type,
+                    message: error.message,
+                }));
+            }
+
             let result = fetch_all_clusters_with_errors(&bg_config);
             let fresh = result.clusters;
 

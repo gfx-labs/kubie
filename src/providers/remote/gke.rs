@@ -46,7 +46,7 @@ impl Gke {
     }
 
     fn token(&self) -> anyhow::Result<&str> {
-        let t = self.config.token.value();
+        let t = self.config.token.value()?;
         if t.is_empty() {
             bail!("GKE token is empty. Set `token` in provider config (e.g. token: $(gcloud auth print-access-token))");
         }
