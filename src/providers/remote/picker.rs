@@ -2,8 +2,8 @@ use std::collections::HashSet;
 use std::sync::mpsc;
 
 use super::cache;
-use super::sync::fetch_all_clusters;
-use crate::picker::{self, PickerItem};
+use super::sync::fetch_all_clusters_with_errors;
+use crate::picker::{self, PickerError, PickerItem, PickerUpdate};
 use crate::providers::config::ProvidersConfig;
 use crate::providers::ClusterInfo;
 use crate::settings::Settings;
@@ -50,18 +50,18 @@ pub fn pick_context(
 
     // Set up background sync channel.
     let rx = if !no_sync && !providers_config.entries.is_empty() {
-        let (tx, rx) = mpsc::channel::<Vec<PickerItem>>();
+        let (tx, rx) = mpsc::channel::<PickerUpdate>();
         let bg_config = crate::providers::config::build_providers(providers_config, None);
         let existing_names: HashSet<String> = items.iter().map(|i| i.value.clone()).collect();
 
         std::thread::spawn(move || {
-            let fresh = fetch_all_clusters(&bg_config);
-            if fresh.is_empty() {
-                return;
-            }
+            let result = fetch_all_clusters_with_errors(&bg_config);
+            let fresh = result.clusters;
 
             // Save updated metadata.
-            let _ = cache::save_metadata(&fresh);
+            if !fresh.is_empty() {
+                let _ = cache::save_metadata(&fresh);
+            }
 
             // Send only genuinely new items to the picker.
             let new_items: Vec<PickerItem> = fresh
@@ -71,7 +71,15 @@ pub fn pick_context(
                 .collect();
 
             if !new_items.is_empty() {
-                let _ = tx.send(new_items);
+                let _ = tx.send(PickerUpdate::Items(new_items));
+            }
+
+            for error in result.errors {
+                let _ = tx.send(PickerUpdate::Error(PickerError {
+                    source: error.source,
+                    provider_type: error.provider_type,
+                    message: error.message,
+                }));
             }
         });
 

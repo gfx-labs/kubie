@@ -43,6 +43,19 @@ pub struct PreviewLine {
     pub value: String,
 }
 
+/// An update produced while the picker is open.
+pub enum PickerUpdate {
+    Items(Vec<PickerItem>),
+    Error(PickerError),
+}
+
+/// A background source failure to display in its tab.
+pub struct PickerError {
+    pub source: String,
+    pub provider_type: String,
+    pub message: String,
+}
+
 // ---------------------------------------------------------------------------
 // Picker state
 // ---------------------------------------------------------------------------
@@ -99,7 +112,9 @@ struct PickerState {
     active_tab: usize,
     scroll_offset: usize,
     /// Channel for receiving new items from background threads.
-    rx: Option<mpsc::Receiver<Vec<PickerItem>>>,
+    rx: Option<mpsc::Receiver<PickerUpdate>>,
+    /// Failures received from background providers, keyed by source name.
+    errors: Vec<PickerError>,
     /// True while waiting for the first batch of items from the background channel.
     loading: bool,
     /// Animation frame counter for the loading spinner.
@@ -114,11 +129,11 @@ impl PickerState {
     fn new(
         items: Vec<PickerItem>,
         frecency: FrecencyDb,
-        rx: Option<mpsc::Receiver<Vec<PickerItem>>>,
+        rx: Option<mpsc::Receiver<PickerUpdate>>,
         picker_settings: &crate::settings::Picker,
     ) -> Self {
         let frecency_scores: Vec<f64> = items.iter().map(|item| frecency.score(&item.value)).collect();
-        let tabs = build_tabs(&items);
+        let tabs = build_tabs(&items, &[]);
 
         let mut indices: Vec<usize> = (0..items.len()).collect();
         indices.sort_by(|&a, &b| {
@@ -148,6 +163,7 @@ impl PickerState {
             active_tab: 0,
             scroll_offset: 0,
             rx,
+            errors: Vec::new(),
             loading,
             spinner_tick: 0,
             preview_width: picker_settings.preview.width.min(80),
@@ -161,16 +177,20 @@ impl PickerState {
         let mut added = false;
         loop {
             match rx.try_recv() {
-                Ok(batch) => {
+                Ok(PickerUpdate::Items(batch)) => {
                     for item in batch {
-                        if self.items.iter().any(|existing| existing.value == item.value) {
-                            continue;
+                        if !self.items.iter().any(|existing| existing.value == item.value) {
+                            let score = self.frecency.score(&item.value);
+                            self.items.push(item);
+                            self.frecency_scores.push(score);
+                            added = true;
                         }
-                        let score = self.frecency.score(&item.value);
-                        self.items.push(item);
-                        self.frecency_scores.push(score);
-                        added = true;
                     }
+                }
+                Ok(PickerUpdate::Error(error)) => {
+                    self.errors.retain(|existing| existing.source != error.source);
+                    self.errors.push(error);
+                    added = true;
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
@@ -183,12 +203,19 @@ impl PickerState {
         }
         if added {
             self.loading = false;
-            self.tabs = build_tabs(&self.items);
+            self.tabs = build_tabs(&self.items, &self.errors);
         }
         added
     }
 
     fn refilter(&mut self, matcher: &mut Matcher) {
+        if self.active_error().is_some() {
+            self.filtered.clear();
+            self.selected = 0;
+            self.scroll_offset = 0;
+            return;
+        }
+
         let tab_filter = if self.active_tab == 0 {
             None
         } else {
@@ -314,6 +341,11 @@ impl PickerState {
         self.selected_entry().map(|e| &self.items[e.item_idx])
     }
 
+    fn active_error(&self) -> Option<&PickerError> {
+        let source = self.tabs.get(self.active_tab)?;
+        self.errors.iter().find(|error| error.source == *source)
+    }
+
     fn insert_char(&mut self, c: char) {
         self.query.insert(self.cursor, c);
         self.cursor += c.len_utf8();
@@ -343,15 +375,20 @@ impl PickerState {
     }
 }
 
-fn build_tabs(items: &[PickerItem]) -> Vec<String> {
+fn build_tabs(items: &[PickerItem], errors: &[PickerError]) -> Vec<String> {
     let mut sources: Vec<String> = Vec::new();
     for item in items {
         if !item.source.is_empty() && !sources.contains(&item.source) {
             sources.push(item.source.clone());
         }
     }
+    for error in errors {
+        if !error.source.is_empty() && !sources.contains(&error.source) {
+            sources.push(error.source.clone());
+        }
+    }
     let mut tabs = vec!["all".to_string()];
-    if sources.len() > 1 {
+    if sources.len() > 1 || !errors.is_empty() {
         tabs.extend(sources);
     }
     tabs
@@ -384,7 +421,20 @@ fn render(frame: &mut Frame, state: &mut PickerState) {
     if show_tabs {
         let tab_area = areas[area_idx];
         area_idx += 1;
-        let tab_titles: Vec<&str> = state.tabs.iter().map(|s| s.as_str()).collect();
+        let tab_titles: Vec<Line> = state
+            .tabs
+            .iter()
+            .map(|source| {
+                if state.errors.iter().any(|error| error.source == *source) {
+                    Line::from(Span::styled(
+                        format!("{source} error"),
+                        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                    ))
+                } else {
+                    Line::from(source.as_str())
+                }
+            })
+            .collect();
         let tabs_widget = Tabs::new(tab_titles)
             .select(state.active_tab)
             .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
@@ -406,6 +456,10 @@ fn render(frame: &mut Frame, state: &mut PickerState) {
 
     // Main area.
     let main_area = areas[area_idx];
+    if let Some(error) = state.active_error() {
+        render_error(frame, error, main_area);
+        return;
+    }
     let has_preview = state.preview_width > 0
         && area.width >= state.preview_min
         && state.selected_item().is_some_and(|item| !item.preview.is_empty());
@@ -421,6 +475,21 @@ fn render(frame: &mut Frame, state: &mut PickerState) {
     } else {
         render_list(frame, state, main_area);
     }
+}
+
+fn render_error(frame: &mut Frame, error: &PickerError, area: Rect) {
+    let lines = vec![
+        Line::from(Span::styled(
+            format!(" {} provider error", error.provider_type),
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )),
+        Line::raw(""),
+        Line::from(Span::styled(
+            format!(" {}", error.message),
+            Style::default().fg(Color::LightRed),
+        )),
+    ];
+    frame.render_widget(Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: false }), area);
 }
 
 fn render_list(frame: &mut Frame, state: &mut PickerState, area: Rect) {
@@ -581,7 +650,7 @@ fn source_color(source: &str) -> Color {
 /// the channel will be merged into the list in real time (for background sync).
 pub fn pick(
     items: Vec<PickerItem>,
-    rx: Option<mpsc::Receiver<Vec<PickerItem>>>,
+    rx: Option<mpsc::Receiver<PickerUpdate>>,
     picker_settings: &crate::settings::Picker,
 ) -> Result<Option<String>> {
     if items.is_empty() && rx.is_none() {
@@ -839,5 +908,39 @@ pub fn provider_context_item(cluster: &crate::providers::ClusterInfo) -> PickerI
         source: cluster.account.clone(),
         provider_type: cluster.provider.clone(),
         preview,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_errors_create_a_source_tab() {
+        let errors = vec![PickerError {
+            source: "production".into(),
+            provider_type: "eks".into(),
+            message: "access denied".into(),
+        }];
+
+        assert_eq!(build_tabs(&[], &errors), vec!["all", "production"]);
+    }
+
+    #[test]
+    fn provider_error_reuses_existing_source_tab() {
+        let items = vec![PickerItem {
+            value: "cluster".into(),
+            display: "cluster".into(),
+            source: "production".into(),
+            provider_type: "eks".into(),
+            preview: Vec::new(),
+        }];
+        let errors = vec![PickerError {
+            source: "production".into(),
+            provider_type: "eks".into(),
+            message: "access denied".into(),
+        }];
+
+        assert_eq!(build_tabs(&items, &errors), vec!["all", "production"]);
     }
 }

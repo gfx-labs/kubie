@@ -213,12 +213,10 @@ impl Provider for Eks {
 
         let mut clusters = Vec::new();
         for name in &response.clusters {
-            match self.describe_cluster(name) {
-                Ok(c) => clusters.push(convert_cluster(account, &self.config.region, &c)),
-                Err(e) => {
-                    eprintln!("Warning: failed to describe EKS cluster {name}: {e}");
-                }
-            }
+            let cluster = self
+                .describe_cluster(name)
+                .with_context(|| format!("Failed to describe EKS cluster {name}"))?;
+            clusters.push(convert_cluster(account, &self.config.region, &cluster));
         }
 
         Ok(clusters)

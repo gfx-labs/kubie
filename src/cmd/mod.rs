@@ -110,13 +110,13 @@ pub fn select_or_list_namespace(settings: &Settings, namespaces: Option<Vec<Stri
         }
         None => {
             // No namespaces yet -- open picker immediately, fetch in background.
-            let (tx, rx) = mpsc::channel::<Vec<PickerItem>>();
+            let (tx, rx) = mpsc::channel::<picker::PickerUpdate>();
 
             thread::spawn(move || {
                 if let Ok(mut ns) = kubectl::get_namespaces(None) {
                     ns.sort();
                     let items: Vec<PickerItem> = ns.iter().map(|n| picker::simple_item(n)).collect();
-                    let _ = tx.send(items);
+                    let _ = tx.send(picker::PickerUpdate::Items(items));
                 }
             });
 
