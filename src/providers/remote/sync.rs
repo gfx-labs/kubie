@@ -119,7 +119,7 @@ pub fn hydrate_all_configs(clusters: &[ClusterInfo], providers: &[NamedProvider]
         if let Err(e) = ensure_hydrated(cluster, providers) {
             eprintln!(
                 "{}",
-                format!("Warning: failed to hydrate {}: {e}", cluster.context_name).yellow()
+                format!("Warning: failed to hydrate {}: {e:#}", cluster.context_name).yellow()
             );
             continue;
         }

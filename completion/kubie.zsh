@@ -93,4 +93,4 @@ _kubie() {
     esac
 }
 
-_kubie "$@"
+compdef _kubie kubie
