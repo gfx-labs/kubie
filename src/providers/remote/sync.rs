@@ -113,6 +113,7 @@ pub fn ensure_hydrated(cluster: &ClusterInfo, providers: &[NamedProvider]) -> an
 }
 
 /// Hydrate all cached clusters and return paths to their kubeconfig files.
+#[allow(dead_code)]
 pub fn hydrate_all_configs(clusters: &[ClusterInfo], providers: &[NamedProvider]) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for cluster in clusters {

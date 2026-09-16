@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
 
-use crate::kubeconfig::{self, KubeConfig};
+use crate::kubeconfig::KubeConfig;
 use crate::settings::{ContextHeaderBehavior, Settings};
 use crate::vars;
 
@@ -60,36 +60,16 @@ pub fn exec(
         return Ok(());
     }
 
-    // If providers are configured, ensure their kubeconfigs are available.
-    #[cfg(feature = "remote")]
-    let extra_kubeconfigs = {
-        if !local && !settings.providers.entries.is_empty() {
-            get_provider_kubeconfig_paths(settings, no_sync)
-        } else {
-            Vec::new()
-        }
-    };
+    let resolved = crate::cmd::resolve::resolve_contexts(
+        settings,
+        &context_name,
+        #[cfg(feature = "remote")]
+        no_sync,
+        #[cfg(feature = "remote")]
+        local,
+    )?;
 
-    #[cfg(feature = "remote")]
-    let installed = if !extra_kubeconfigs.is_empty() {
-        let mut all_paths: Vec<String> = Vec::new();
-        for p in extra_kubeconfigs {
-            all_paths.push(p.to_string_lossy().to_string());
-        }
-        for p in settings.get_kube_configs_paths()? {
-            all_paths.push(p.to_string_lossy().to_string());
-        }
-        kubeconfig::get_kubeconfigs_contexts(&all_paths)?
-    } else {
-        kubeconfig::get_installed_contexts(settings)?
-    };
-
-    #[cfg(not(feature = "remote"))]
-    let installed = kubeconfig::get_installed_contexts(settings)?;
-
-    let matching = installed.get_contexts_matching(&context_name, settings.behavior.allow_multiple_context_patterns);
-
-    if matching.is_empty() {
+    if resolved.context_names.is_empty() {
         return Err(anyhow!("No context matching {}", context_name));
     }
 
@@ -98,11 +78,13 @@ pub fn exec(
         .unwrap_or(&settings.behavior.print_context_in_exec)
         .should_print_headers();
 
-    for context_src in matching {
+    for name in &resolved.context_names {
         if print_context {
-            println!("CONTEXT => {}", context_src.item.name);
+            println!("CONTEXT => {name}");
         }
-        let kubeconfig = installed.make_kubeconfig_for_context(&context_src.item.name, Some(&namespace_name))?;
+        let kubeconfig = resolved
+            .installed
+            .make_kubeconfig_for_context(name, Some(&namespace_name))?;
         let return_code = run_in_context(&kubeconfig, &args)?;
         if print_context {
             println!("{}", "-".repeat(20));
@@ -114,37 +96,4 @@ pub fn exec(
     }
 
     std::process::exit(0);
-}
-
-/// Get kubeconfig paths from providers (hydrated on demand).
-#[cfg(feature = "remote")]
-fn get_provider_kubeconfig_paths(settings: &Settings, no_sync: bool) -> Vec<std::path::PathBuf> {
-    use crate::providers;
-
-    let prov = providers::config::build_providers(&settings.providers, None);
-    if prov.is_empty() {
-        return Vec::new();
-    }
-
-    let clusters = if no_sync {
-        providers::remote::cache::load_metadata()
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-    } else {
-        match providers::remote::cache::load_metadata().ok().flatten() {
-            Some(c) if !c.is_empty() => {
-                let fresh = providers::remote::sync::fetch_all_clusters(&prov);
-                if fresh.is_empty() {
-                    c
-                } else {
-                    let _ = providers::remote::cache::save_metadata(&fresh);
-                    fresh
-                }
-            }
-            _ => providers::remote::sync::full_sync(&prov).unwrap_or_default(),
-        }
-    };
-
-    providers::remote::sync::hydrate_all_configs(&clusters, &prov)
 }

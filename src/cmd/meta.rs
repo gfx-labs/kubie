@@ -103,6 +103,25 @@ pub enum Kubie {
         local: bool,
     },
 
+    /// List all known contexts (local kubeconfigs + cloud providers), non-interactively.
+    /// Intended for scripts and agents. Prints one context name per line, or JSON with --json.
+    #[clap(name = "list", visible_alias = "ls")]
+    List {
+        /// Output structured JSON including cluster, server, namespace and provider info.
+        #[clap(long = "json")]
+        json: bool,
+
+        /// Skip cloud provider sync, using cached metadata only.
+        #[cfg(feature = "remote")]
+        #[clap(long = "no-sync")]
+        no_sync: bool,
+
+        /// Skip all remote providers, only list local kubeconfig contexts.
+        #[cfg(feature = "remote")]
+        #[clap(long = "local")]
+        local: bool,
+    },
+
     /// Check the Kubernetes config files for issues.
     #[clap(name = "lint")]
     Lint,

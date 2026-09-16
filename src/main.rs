@@ -85,6 +85,22 @@ fn main() -> Result<()> {
                 local,
             )?;
         }
+        Kubie::List {
+            json,
+            #[cfg(feature = "remote")]
+            no_sync,
+            #[cfg(feature = "remote")]
+            local,
+        } => {
+            cmd::list::list(
+                &settings,
+                json,
+                #[cfg(feature = "remote")]
+                no_sync,
+                #[cfg(feature = "remote")]
+                local,
+            )?;
+        }
         Kubie::Lint => {
             cmd::lint::lint(&settings)?;
         }

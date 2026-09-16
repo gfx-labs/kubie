@@ -116,6 +116,7 @@ impl Installed {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn get_contexts_matching(
         &self,
         pattern: &str,

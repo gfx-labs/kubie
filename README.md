@@ -125,6 +125,9 @@ Selectable menus will be available when using `kubie ctx` and `kubie ns`.
   in the given namespace
 * `kubie exec <wildcard> <namespace> -e <cmd> <args>...` execute a command in all the contexts matched by the wildcard and
   in the given namespace but fail early if any of the commands executed return a non-zero exit code
+* `kubie list` list all known contexts (local + providers), non-interactive, one per line
+* `kubie list --json` same, as structured JSON with cluster, server, namespace and provider info
+* `kubie list --local` / `kubie list --no-sync` skip providers entirely / use cached provider metadata only
 * `kubie export <context> <namespace>` prints the path to an isolated config file for a context and namespace
 * `kubie edit` display a selectable menu of contexts to edit
 * `kubie edit <context>` edit the file that contains this context
@@ -134,6 +137,22 @@ Selectable menus will be available when using `kubie ctx` and `kubie ns`.
 * `kubie info ns` print name of current namespace
 * `kubie info depth` print depth of recursive contexts
 * `kubie update` will check the latest kubie version and update your local installation if needed
+
+### Agents / scripting
+
+`kubie list` and `kubie exec` are fully non-interactive and are the recommended
+entry points for AI agents and scripts. Context resolution is cheapest-first:
+local kubeconfigs, then cached provider metadata (only the matching cluster's
+kubeconfig is downloaded), and a full provider sync only when nothing matched.
+Downloaded kubeconfigs are cached for 24 hours, so repeated `kubie exec` calls
+against the same cluster are instant.
+
+An agent skill describing this workflow lives in [`skills/kubie`](skills/kubie/SKILL.md).
+Install it by copying the folder into your agent's skills directory, e.g.:
+
+```bash
+cp -r skills/kubie ~/.claude/skills/kubie
+```
 
 ## Settings
 You can customize kubie's behavior with the `~/.kube/kubie.yaml` file. The settings available and their defaults are

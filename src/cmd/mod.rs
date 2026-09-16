@@ -16,8 +16,10 @@ pub mod exec;
 pub mod export;
 pub mod info;
 pub mod lint;
+pub mod list;
 pub mod meta;
 pub mod namespace;
+pub mod resolve;
 #[cfg(feature = "update")]
 pub mod update;
 
