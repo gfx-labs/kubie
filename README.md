@@ -148,7 +148,17 @@ Downloaded kubeconfigs are cached for 24 hours, so repeated `kubie exec` calls
 against the same cluster are instant.
 
 An agent skill describing this workflow lives in [`skills/kubie`](skills/kubie/SKILL.md).
-Install it by copying the folder into your agent's skills directory, e.g.:
+
+Install it with the [`skills`](https://github.com/vercel-labs/skills) CLI:
+
+```bash
+npx skills add gfx-labs/kubie                              # pick agent/scope interactively
+npx skills add gfx-labs/kubie -g -y --agent claude-code    # global, no prompts
+npx skills add . -g -y --agent claude-code                 # from a local checkout
+```
+
+Run `npx skills add gfx-labs/kubie -l` to list what's in the repo, and
+`npx skills ls -g` to see what's installed. Or just copy it by hand:
 
 ```bash
 cp -r skills/kubie ~/.claude/skills/kubie
