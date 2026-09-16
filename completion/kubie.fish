@@ -1,4 +1,4 @@
-set -l commands ctx ns exec export edit edit-config info lint delete update generate-completion
+set -l commands ctx ns list exec export edit edit-config info lint delete update generate-completion
 
 complete -c kubie --no-files
 

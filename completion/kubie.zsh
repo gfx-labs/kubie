@@ -20,6 +20,7 @@ _kubie() {
         'exec:execute a command in a context'
         'export:export kubeconfig path'
         'edit:edit a context'
+        'list:list all contexts non-interactively'
         'edit-config:edit kubie config'
         'info:show current context/namespace/depth'
         'lint:check kubeconfig files for issues'

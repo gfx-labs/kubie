@@ -5,7 +5,7 @@ _kubie() {
 
     case "${COMP_CWORD}" in
         1)
-            COMPREPLY=($(compgen -W "ctx ns exec export edit edit-config info lint delete update generate-completion" -- "$cur"))
+            COMPREPLY=($(compgen -W "ctx ns list exec export edit edit-config info lint delete update generate-completion" -- "$cur"))
             ;;
         2)
             case "${prev}" in
