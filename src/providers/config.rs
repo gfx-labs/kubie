@@ -318,6 +318,12 @@ const SAMPLE_PROVIDERS_CONFIG: &str = r#"# Provider configuration for kubie.
 #     config:
 #       url: https://rancher.example.com
 #       token: $(vault kv get -field=token secret/rancher)
+#
+#   my-eks:
+#     type: eks
+#     config:
+#       regions: [us-east-1, us-west-2]
+#       profile: my-profile
 "#;
 
 // ---------------------------------------------------------------------------

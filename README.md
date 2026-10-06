@@ -244,6 +244,20 @@ providers:
     #         project: my-gcp-project
     #         token: $(gcloud auth print-access-token)
 
+    # EKS: discovers clusters with the AWS CLI (`aws eks list-clusters`).
+    # Kubeconfigs authenticate with `aws eks get-token`, so the AWS CLI must be
+    # installed and logged in (e.g. `aws sso login`). Context names are the
+    # cluster ARN, matching `aws eks update-kubeconfig`.
+    # my-eks:
+    #     type: eks
+    #     config:
+    #         # Regions to scan. Omit to use the AWS CLI default region.
+    #         regions: [us-east-1, us-west-2]
+    #         # Optional: AWS CLI profile.
+    #         profile: my-profile
+    #         # Optional: IAM role assumed by `aws eks get-token`.
+    #         role_arn: arn:aws:iam::123456789012:role/eks-admin
+
 # TUI picker settings.
 picker:
     preview:
@@ -339,5 +353,5 @@ cargo build --release --no-default-features
 
 ## Future plans
 * Transparent loading of PGP-encrypted kubeconfig files (`.yaml.gpg`, `.yml.gpg`)
-* Additional provider backends (EKS, AKS, etc.)
+* Additional provider backends (AKS, etc.)
 * Heuristic-based namespace pre-selection
