@@ -82,6 +82,18 @@ pub fn full_sync(providers: &[NamedProvider]) -> anyhow::Result<Vec<ClusterInfo>
 
 /// Download a kubeconfig for a cluster if not cached or older than 24 hours.
 pub fn ensure_hydrated(cluster: &ClusterInfo, providers: &[NamedProvider]) -> anyhow::Result<()> {
+    let (_, provider) = providers
+        .iter()
+        .find(|(name, provider)| provider.provider_type() == cluster.provider && *name == cluster.account)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No active provider '{}' account '{}' found for cluster {}",
+                cluster.provider,
+                cluster.account,
+                cluster.name
+            )
+        })?;
+
     let filename = cache::config_filename(cluster);
     let path = cache::configs_dir().join(&filename);
 
@@ -94,12 +106,6 @@ pub fn ensure_hydrated(cluster: &ClusterInfo, providers: &[NamedProvider]) -> an
             return Ok(());
         }
     }
-
-    let (_, provider) = providers
-        .iter()
-        .find(|(name, p)| p.provider_type() == cluster.provider && *name == cluster.account)
-        .or_else(|| providers.iter().find(|(_, p)| p.provider_type() == cluster.provider))
-        .ok_or_else(|| anyhow::anyhow!("No provider '{}' found for cluster {}", cluster.provider, cluster.name))?;
 
     eprintln!(
         "{}",

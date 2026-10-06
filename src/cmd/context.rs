@@ -157,6 +157,45 @@ pub fn context(
         }
     }
 
+    #[cfg(feature = "remote")]
+    if !local && kubeconfigs.is_empty() {
+        let previous = if context_name.as_deref() == Some("-") {
+            let session = Session::load()?;
+            if let Some(entry) = session.get_last_context() {
+                Some((entry.context.clone(), entry.namespace.clone()))
+            } else {
+                let state = State::load()?;
+                state.last_context.map(|name| {
+                    let namespace = state.namespace_history.get(&name).cloned().flatten();
+                    (name, namespace)
+                })
+            }
+        } else {
+            None
+        };
+        let requested = previous
+            .as_ref()
+            .map(|(name, _)| name.as_str())
+            .or(context_name.as_deref());
+        if let Some(requested) = requested {
+            if crate::cmd::selector::is_qualified(requested) {
+                let mut resolved = crate::cmd::resolve::resolve_contexts(settings, requested, no_sync, false)?;
+                let selected_name = if resolved.context_names.len() == 1 {
+                    resolved.context_names[0].clone()
+                } else {
+                    match select_or_list_context(settings, &mut resolved.installed)? {
+                        SelectResult::Selected(name) => name,
+                        _ => return Ok(()),
+                    }
+                };
+                let namespace = namespace_name
+                    .as_deref()
+                    .or_else(|| previous.as_ref().and_then(|(_, namespace)| namespace.as_deref()));
+                return enter_context(settings, resolved.installed, &selected_name, namespace, recursive);
+            }
+        }
+    }
+
     let mut installed = if kubeconfigs.is_empty() {
         kubeconfig::get_installed_contexts(settings)?
     } else {
@@ -175,7 +214,7 @@ pub fn context(
     let mut all_context_names: Vec<String> = installed.contexts.iter().map(|c| c.item.name.clone()).collect();
 
     #[cfg(feature = "remote")]
-    let provider_clusters = if !local && !settings.providers.entries.is_empty() {
+    let provider_clusters = if !local && kubeconfigs.is_empty() && !settings.providers.entries.is_empty() {
         let clusters = crate::providers::remote::cache::load_metadata()
             .ok()
             .flatten()
@@ -243,32 +282,27 @@ fn context_with_providers(
     };
 
     let ctx_name = &result.context_name;
-    let clusters = &result.clusters;
 
-    // Check if this is a provider-discovered context.
-    if let Some(cluster) = providers::remote::cache::find_cluster_for_context(ctx_name, clusters) {
-        let prov = providers::config::build_providers(&settings.providers, None);
-        providers::remote::sync::ensure_hydrated(&cluster, &prov)?;
-
-        let config_file =
-            providers::remote::cache::configs_dir().join(providers::remote::cache::config_filename(&cluster));
-
-        // Load the provider kubeconfig + normal configs into memory, then clean up the temp file.
-        let mut kubeconfigs = vec![config_file.to_string_lossy().to_string()];
-        let normal_paths = settings.get_kube_configs_paths()?;
-        for p in normal_paths {
-            kubeconfigs.push(p.to_string_lossy().to_string());
-        }
-        let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
-        providers::remote::sync::cleanup_config(&config_file);
-
-        // The context name inside the downloaded kubeconfig may differ from our
-        // display name. Find the actual context name from the file we just loaded.
-        let actual_ctx = find_provider_context_name(&installed, ctx_name);
-        return enter_context(settings, installed, &actual_ctx, namespace_name.as_deref(), recursive);
+    if result.provider_selector {
+        let mut resolved = crate::cmd::resolve::resolve_contexts(settings, ctx_name, no_sync, false)?;
+        let selected_name = if resolved.context_names.len() == 1 {
+            resolved.context_names[0].clone()
+        } else {
+            match select_or_list_context(settings, &mut resolved.installed)? {
+                SelectResult::Selected(name) => name,
+                _ => return Ok(()),
+            }
+        };
+        return enter_context(
+            settings,
+            resolved.installed,
+            &selected_name,
+            namespace_name.as_deref(),
+            recursive,
+        );
     }
 
-    // It's a local kubeconfig context.
+    // The picker can also return an ordinary local kubeconfig context name.
     let installed = kubeconfig::get_installed_contexts(settings)?;
     enter_context(settings, installed, ctx_name, namespace_name.as_deref(), recursive)
 }

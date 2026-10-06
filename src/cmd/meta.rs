@@ -22,7 +22,7 @@ pub enum Kubie {
         #[clap(short = 'r', long = "recursive")]
         recursive: bool,
 
-        /// Name of the context to enter. Use '-' to switch back to the previous context.
+        /// Context name or provider selector (<provider>/<name> or <provider>/<account>/<name>). Use --local for literal slash-containing kubeconfig names, or '-' for the previous context.
         context_name: Option<String>,
 
         /// Skip background cloud provider sync, using cached metadata only.
@@ -30,7 +30,7 @@ pub enum Kubie {
         #[clap(long = "no-sync")]
         no_sync: bool,
 
-        /// Skip all remote providers, only show local kubeconfig contexts.
+        /// Skip remote providers; slash-containing context names are treated literally.
         #[cfg(feature = "remote")]
         #[clap(long = "local")]
         local: bool,
@@ -60,7 +60,7 @@ pub enum Kubie {
     /// Execute a command inside of the given context and namespace.
     #[clap(name = "exec", trailing_var_arg = true)]
     Exec {
-        /// Name of the context in which to run the command.
+        /// Context name or provider selector (<provider>/<name> or <provider>/<account>/<name>).
         context_name: String,
         /// Namespace in which to run the command. This is mandatory to avoid potential errors.
         namespace_name: String,
@@ -107,7 +107,7 @@ pub enum Kubie {
     /// Intended for scripts and agents. Prints one context name per line, or JSON with --json.
     #[clap(name = "list", visible_alias = "ls")]
     List {
-        /// Output structured JSON including cluster, server, namespace and provider info.
+        /// Output structured JSON including cluster, server, namespace, provider, account and selector fields.
         #[clap(long = "json")]
         json: bool,
 

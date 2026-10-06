@@ -113,6 +113,9 @@ Selectable menus will be available when using `kubie ctx` and `kubie ns`.
 
 * `kubie ctx` display a selectable menu of contexts
 * `kubie ctx <context>` switch the current shell to the given context (spawns a shell if not a kubie shell)
+* `kubie ctx <provider>/<name>` select a provider cluster by provider and cluster/context name, for example `kubie ctx rancher/monitoring` or `kubie ctx digitalocean/monitoring`
+* `kubie ctx <provider>/<account>/<name>` disambiguate clusters discovered from multiple accounts
+* `kubie ctx --local <context>` resolve only local kubeconfig names, including literal names containing `/`
 * `kubie ctx -` switch back to the previous context (session history inside a kubie shell, last globally-used context otherwise)
 * `kubie ctx <context> -r` spawn a recursive shell in the given context
 * `kubie ctx <context> -n <namespace>` spawn a shell in the given context and namespace
@@ -126,9 +129,22 @@ Selectable menus will be available when using `kubie ctx` and `kubie ns`.
 * `kubie exec <wildcard> <namespace> -e <cmd> <args>...` execute a command in all the contexts matched by the wildcard and
   in the given namespace but fail early if any of the commands executed return a non-zero exit code
 * `kubie list` list all known contexts (local + providers), non-interactive, one per line
-* `kubie list --json` same, as structured JSON with cluster, server, namespace and provider info
+* `kubie list --json` same, as structured JSON with cluster, server, namespace, provider, account and an actionable provider selector when applicable
 * `kubie list --local` / `kubie list --no-sync` skip providers entirely / use cached provider metadata only
 * `kubie export <context> <namespace>` prints the path to an isolated config file for a context and namespace
+
+Provider cluster selectors use `<provider>/<name>` (for example `rancher/monitoring` or
+`digitalocean/monitoring`). Add the account segment when the same provider has that name in
+multiple accounts: `<provider>/<account>/<name>`. A recognized provider prefix reserves
+that syntax, and malformed qualified selectors fail closed rather than falling back to a
+local/fuzzy match. `@id:<hex>` is reserved for opaque ID selectors; use the `selector` value
+from `kubie list --json` rather than constructing one by hand. Use `--local` to select a
+slash-containing local context literally.
+Quote wildcard selectors so the shell does not expand them, for example
+`kubie exec 'rancher/monitoring-*' default kubectl get pods`. Older bare names in context
+history remain bare until selected again with a qualified name. If duplicate same-name contexts
+exist across files in one kubeconfig-provider account, they are still merged and may resolve to
+the first matching context. Put them in separate provider accounts or rename the local contexts.
 * `kubie edit` display a selectable menu of contexts to edit
 * `kubie edit <context>` edit the file that contains this context
 * `kubie edit-config` edit kubie's own config file
@@ -141,7 +157,11 @@ Selectable menus will be available when using `kubie ctx` and `kubie ns`.
 ### Agents / scripting
 
 `kubie list` and `kubie exec` are fully non-interactive and are the recommended
-entry points for AI agents and scripts. Context resolution is cheapest-first:
+entry points for AI agents and scripts. Provider contexts can be selected with
+`provider/name` (for example `rancher/monitoring` or `digitalocean/monitoring`), or
+`provider/account/name` when account identity is needed. Quote wildcard selectors,
+for example `'rancher/monitoring-*'`. `--local` treats slash-containing context names
+as literal local kubeconfig names. Context resolution is cheapest-first:
 local kubeconfigs, then cached provider metadata (only the matching cluster's
 kubeconfig is downloaded), and a full provider sync only when nothing matched.
 Downloaded kubeconfigs are cached for 24 hours, so repeated `kubie exec` calls

@@ -20,6 +20,8 @@ pub mod list;
 pub mod meta;
 pub mod namespace;
 pub mod resolve;
+#[cfg(feature = "remote")]
+pub mod selector;
 #[cfg(feature = "update")]
 pub mod update;
 

@@ -26,7 +26,18 @@ kubie list --no-sync      # cached provider metadata only, never hits the networ
 `"source": "provider"` in JSON along with `provider` and `account`.
 
 Prefer `kubie list --json` when you need cluster endpoints or to distinguish
-local from cloud contexts. Prefer `kubie list --no-sync` in tight loops.
+local from cloud contexts. Provider contexts can be selected with `provider/name`,
+such as `rancher/monitoring` or `digitalocean/monitoring`. Use
+`provider/account/name` when a provider has matching names in multiple accounts.
+A recognized provider prefix reserves qualified syntax, and malformed qualified selectors
+fail closed instead of falling back to local/fuzzy matching. `@id:<hex>` is reserved for opaque ID
+selectors; copy the `selector` field from `kubie list --json` rather than constructing one.
+Use `--local` for literal slash-containing local context names. Quote wildcard selectors, for example
+`kubie exec 'rancher/monitoring-*' default kubectl get pods`. Older bare context-history
+entries remain bare until selected again by a qualified name. Same-name contexts across files
+within one kubeconfig-provider account are still merged and may resolve to the first match. Put
+them in separate provider accounts or rename the local contexts.
+Prefer `kubie list --no-sync` in tight loops.
 
 ## Running commands
 
@@ -34,6 +45,7 @@ local from cloud contexts. Prefer `kubie list --no-sync` in tight loops.
 kubie exec rome default kubectl get pods
 kubie exec do-tor1-rome kube-system kubectl get deploy -o json
 kubie exec 'do-tor1-*' default kubectl get nodes      # wildcard: runs per matching context
+kubie exec 'rancher/monitoring-*' default kubectl get pods # provider-qualified wildcard
 kubie exec -e 'do-*' default kubectl get ns           # stop at first failure
 ```
 

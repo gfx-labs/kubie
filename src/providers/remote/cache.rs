@@ -132,7 +132,15 @@ pub fn config_filename(cluster: &ClusterInfo) -> String {
     let safe_provider = sanitize(&cluster.provider);
     let safe_account = sanitize(&cluster.account);
     let safe_cluster = sanitize(&cluster.name);
-    format!("{safe_provider}_{safe_account}_{safe_cluster}.yaml")
+    use std::hash::{Hash, Hasher};
+    let mut identity = std::collections::hash_map::DefaultHasher::new();
+    cluster.provider.hash(&mut identity);
+    cluster.account.hash(&mut identity);
+    cluster.id.hash(&mut identity);
+    format!(
+        "{safe_provider}_{safe_account}_{safe_cluster}_{:016x}.yaml",
+        identity.finish()
+    )
 }
 
 /// Write a kubeconfig to the ephemeral cache.
