@@ -1101,7 +1101,7 @@ dependencies = [
 
 [[package]]
 name = "kubie"
-version = "2026.10.0"
+version = "2026.10.1"
 dependencies = [
  "anyhow",
  "attohttpc",
@@ -1121,6 +1121,7 @@ dependencies = [
  "mimalloc",
  "nucleo-matcher",
  "ratatui",
+ "rustls",
  "serde",
  "serde_json",
  "serde_yaml",

@@ -16,6 +16,8 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-features -- -D warnings
       - run: cargo test --all-features
+      - name: Check updater HTTPS
+        run: cargo test --locked --all-features cmd::update::test_latest_release_https -- --ignored
 
   build-linux:
     runs-on: ubicloud-standard-2

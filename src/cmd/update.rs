@@ -19,6 +19,8 @@ pub struct Release {
 
 impl Release {
     pub fn get_latest() -> Result<Release> {
+        // Both HTTP clients enable different backends, so select the updater's default explicitly.
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let latest_release = attohttpc::get(LATEST_RELEASE_URL).send()?.json()?;
         Ok(latest_release)
     }
@@ -92,6 +94,14 @@ pub fn replace_file(old_file: &Path, new_file: &Path) -> std::io::Result<()> {
     fs::remove_file(old_file)?;
     fs::copy(new_file, old_file)?;
     Ok(())
+}
+
+#[test]
+#[ignore = "requires the live GitHub releases API"]
+fn test_latest_release_https() {
+    let release = Release::get_latest().expect("fetch release metadata over HTTPS");
+    assert!(release.tag_name.starts_with('v'));
+    assert!(!release.assets.is_empty());
 }
 
 #[test]
