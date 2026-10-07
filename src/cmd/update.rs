@@ -9,7 +9,7 @@ use cfg_if::cfg_if;
 use serde::Deserialize;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/sbstp/kubie/releases/latest";
+const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/gfx-labs/kubie/releases/latest";
 
 #[derive(Debug, Deserialize)]
 pub struct Release {
@@ -24,7 +24,7 @@ impl Release {
     }
 
     // Get the right binary name based on which OS and architecture kubie was built-on.
-    // Names match the GitHub releases: https://github.com/sbstp/kubie/releases
+    // Names match the GitHub releases: https://github.com/gfx-labs/kubie/releases
     fn get_binary_name() -> Option<&'static str> {
         cfg_if! {
             if #[cfg(all(target_os = "linux", target_arch = "x86_64"))] {
@@ -70,7 +70,7 @@ pub fn update() -> Result<()> {
             latest_release.tag_name
         );
 
-        let download_url = latest_release.get_binary_url().context("Sorry, this release has no build for your OS, please create an issue : https://github.com/sbstp/kubie/issues")?;
+        let download_url = latest_release.get_binary_url().context("Sorry, this release has no build for your OS, please create an issue : https://github.com/gfx-labs/kubie/issues")?;
         println!("Download url is: {download_url}");
 
         let resp = attohttpc::get(download_url).send()?;
