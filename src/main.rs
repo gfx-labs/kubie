@@ -21,12 +21,19 @@ mod state;
 mod vars;
 
 fn main() -> Result<()> {
-    let settings = Settings::load()?;
+    let kubie = Kubie::parse();
 
     #[cfg(feature = "remote")]
-    providers::remote::cache::init();
+    {
+        providers::remote::cache::init();
+        if matches!(kubie, Kubie::ClearCache) {
+            providers::remote::cache::clear()?;
+            println!("Provider cache cleared. Metadata and kubeconfigs will be fetched again when needed.");
+            return Ok(());
+        }
+    }
 
-    let kubie = Kubie::parse();
+    let settings = Settings::load()?;
 
     match kubie {
         Kubie::Context {
@@ -101,6 +108,8 @@ fn main() -> Result<()> {
                 local,
             )?;
         }
+        #[cfg(feature = "remote")]
+        Kubie::ClearCache => unreachable!("clear-cache is handled before loading settings"),
         Kubie::Lint => {
             cmd::lint::lint(&settings)?;
         }

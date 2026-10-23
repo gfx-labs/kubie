@@ -3,6 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::providers::ClusterInfo;
@@ -25,7 +26,7 @@ static TEMP_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// Initialize cache paths. Must be called once at startup when cloud feature is active.
 ///
-/// - Metadata: `$XDG_CACHE_HOME/kubie/cloud/` (default `~/.cache/kubie/cloud/`)
+/// - Metadata: `$XDG_CACHE_HOME/kubie/providers/` (default `~/.cache/kubie/providers/`)
 /// - Configs:  `/tmp/kubie-providers-<uid>/configs/`
 pub fn init() {
     DATA_DIR.get_or_init(|| {
@@ -65,6 +66,48 @@ pub fn configs_dir() -> PathBuf {
 /// Returns the metadata file path (persistent, in XDG cache).
 fn metadata_path() -> PathBuf {
     data_dir().join("metadata.json")
+}
+
+/// Clear only provider metadata and downloaded kubeconfigs, not isolated session copies.
+pub fn clear() -> Result<()> {
+    clear_paths(data_dir(), temp_dir())
+}
+
+fn clear_paths(data: &Path, temp: &Path) -> Result<()> {
+    for dir in data.parent().into_iter().chain([data, temp]) {
+        match fs::symlink_metadata(dir) {
+            Ok(metadata) if !metadata.is_dir() => {
+                bail!(
+                    "Refusing to clear provider cache through a non-directory or symlink: {}",
+                    dir.display()
+                );
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("Could not inspect cache directory {}", dir.display()))
+            }
+        }
+    }
+
+    let metadata = data.join("metadata.json");
+    ignore_missing(fs::remove_file(&metadata))
+        .with_context(|| format!("Could not clear provider metadata {}", metadata.display()))?;
+
+    let configs = temp.join("configs");
+    let result = match fs::symlink_metadata(&configs) {
+        Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(&configs),
+        Ok(_) => fs::remove_file(&configs),
+        Err(error) => Err(error),
+    };
+    ignore_missing(result).with_context(|| format!("Could not clear provider kubeconfigs {}", configs.display()))
+}
+
+fn ignore_missing(result: std::io::Result<()>) -> std::io::Result<()> {
+    match result {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
 }
 
 /// Ensure the ephemeral configs directory exists with restrictive permissions.
@@ -156,4 +199,61 @@ pub fn write_config(cluster: &ClusterInfo, content: &str) -> anyhow::Result<Path
 /// Find a cluster by its context name.
 pub fn find_cluster_for_context(context_name: &str, clusters: &[ClusterInfo]) -> Option<ClusterInfo> {
     clusters.iter().find(|c| c.context_name == context_name).cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::symlink;
+
+    use super::*;
+
+    #[test]
+    fn clearing_cache_preserves_session_files_and_symlink_targets() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let data = root.path().join("providers");
+        let temp = root.path().join("provider-temp");
+        let configs = temp.join("configs");
+        fs::create_dir_all(&data)?;
+        fs::create_dir_all(&configs)?;
+        let session = root.path().join("kubie-config.yaml");
+        fs::write(&session, "isolated session")?;
+        fs::write(data.join("metadata.json"), "cached metadata")?;
+        fs::write(data.join("unrelated"), "preserved")?;
+        fs::write(configs.join("cluster.yaml"), "cached kubeconfig")?;
+        symlink(root.path(), configs.join("outside"))?;
+
+        clear_paths(&data, &temp)?;
+        clear_paths(&data, &temp)?;
+        assert!(!data.join("metadata.json").exists());
+        assert!(!configs.exists());
+        assert_eq!(fs::read_to_string(&session)?, "isolated session");
+        assert_eq!(fs::read_to_string(data.join("unrelated"))?, "preserved");
+
+        symlink(root.path(), &configs)?;
+        symlink(&session, data.join("metadata.json"))?;
+        clear_paths(&data, &temp)?;
+        assert!(fs::symlink_metadata(&configs).is_err());
+        assert_eq!(fs::read_to_string(&session)?, "isolated session");
+
+        let malformed = data.join("metadata.json");
+        fs::create_dir(&malformed)?;
+        fs::write(malformed.join("preserve"), "not a metadata file")?;
+        assert!(clear_paths(&data, &temp).is_err());
+        assert_eq!(fs::read_to_string(malformed.join("preserve"))?, "not a metadata file");
+        fs::remove_file(malformed.join("preserve"))?;
+        fs::remove_dir(&malformed)?;
+
+        let linked_parent = root.path().join("linked-parent");
+        symlink(root.path(), &linked_parent)?;
+        fs::write(data.join("metadata.json"), "preserve on refusal")?;
+        assert!(clear_paths(&linked_parent.join("providers"), &temp).is_err());
+        assert_eq!(fs::read_to_string(data.join("metadata.json"))?, "preserve on refusal");
+
+        fs::remove_dir(&temp)?;
+        symlink(root.path(), &temp)?;
+        fs::write(data.join("metadata.json"), "preserve on refusal")?;
+        assert!(clear_paths(&data, &temp).is_err());
+        assert_eq!(fs::read_to_string(data.join("metadata.json"))?, "preserve on refusal");
+        Ok(())
+    }
 }

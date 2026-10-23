@@ -26,6 +26,7 @@ _kubie() {
         'lint:check kubeconfig files for issues'
         'delete:delete a context'
         'update:check for updates'
+        'clear-cache:remove provider metadata and downloaded kubeconfigs'
         'generate-completion:generate shell completions'
     )
 

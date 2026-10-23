@@ -122,6 +122,11 @@ pub enum Kubie {
         local: bool,
     },
 
+    /// Clear provider metadata and downloaded kubeconfigs, preserving configuration and active sessions.
+    #[cfg(feature = "remote")]
+    #[clap(name = "clear-cache")]
+    ClearCache,
+
     /// Check the Kubernetes config files for issues.
     #[clap(name = "lint")]
     Lint,

@@ -95,6 +95,15 @@ This writes an isolated temp kubeconfig and prints its path. Delete it when done
 
 ## Troubleshooting
 
+- `kubie clear-cache` removes provider discovery metadata at
+  `$XDG_CACHE_HOME/kubie/providers/metadata.json` (default
+  `~/.cache/kubie/providers/metadata.json`) and downloaded provider kubeconfigs in
+  `/tmp/kubie-providers-<uid>/configs`. Configuration, original kubeconfigs,
+  history, frecency, and active isolated sessions are preserved. It makes no
+  provider API calls. The next normal sync/hydration repopulates the caches.
+  Clearing is best-effort against concurrent syncs, so avoid running a sync at
+  the same time. There are no flags or dry-run mode. It works even if kubie's
+  configuration is malformed.
 - `No context matching X` - run `kubie list` to see valid names; provider
   contexts often carry a prefix such as `do-tor1-`.
-- Stale cluster list - re-run without `--no-sync` to force a provider refresh.
+- Stale cluster list - run `kubie clear-cache`, then `kubie list` to rediscover providers.

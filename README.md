@@ -132,6 +132,7 @@ Selectable menus will be available when using `kubie ctx` and `kubie ns`.
 * `kubie list --json` same, as structured JSON with cluster, server, namespace, provider, account and an actionable provider selector when applicable
 * `kubie list --local` / `kubie list --no-sync` skip providers entirely / use cached provider metadata only
 * `kubie export <context> <namespace>` prints the path to an isolated config file for a context and namespace
+* `kubie clear-cache` removes provider discovery metadata and downloaded provider kubeconfigs
 
 Provider cluster selectors use `<provider>/<name>` (for example `rancher/monitoring` or
 `digitalocean/monitoring`). Add the account segment when the same provider has that name in
@@ -153,6 +154,17 @@ the first matching context. Put them in separate provider accounts or rename the
 * `kubie info ns` print name of current namespace
 * `kubie info depth` print depth of recursive contexts
 * `kubie update` will check the latest kubie version and update your local installation if needed
+
+### Clearing provider caches
+
+`kubie clear-cache` removes `$XDG_CACHE_HOME/kubie/providers/metadata.json`
+(default `~/.cache/kubie/providers/metadata.json`) and downloaded provider kubeconfigs
+in `/tmp/kubie-providers-<uid>/configs`. It preserves configuration, original
+kubeconfigs, history, frecency, and active isolated sessions. It makes no provider
+API calls. The next normal sync/hydration repopulates the caches.
+Clearing is best-effort against concurrent syncs, so avoid running a sync at the
+same time. The command takes no flags and has no dry-run mode.
+It works even if kubie's configuration is malformed.
 
 ### Agents / scripting
 
