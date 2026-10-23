@@ -41,7 +41,7 @@ wildmatch = "2"
 # Remote provider dependencies (optional, behind "remote" feature)
 colored = { version = "3", optional = true }
 ureq = { version = "3", optional = true }
-rustls = { version = "0.23.45", default-features = false, features = ["aws_lc_rs"], optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs"], optional = true }
 dialoguer = { version = "0.12.0", features = ["fuzzy-select"] }
 
 [target.arm-unknown-linux-musleabi.dependencies]
