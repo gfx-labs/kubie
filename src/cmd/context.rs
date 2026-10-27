@@ -256,8 +256,6 @@ pub fn context(
                 kubeconfigs.push(p.to_string_lossy().to_string());
             }
             let installed = kubeconfig::get_kubeconfigs_contexts(&kubeconfigs)?;
-            crate::providers::remote::sync::cleanup_config(&config_file);
-
             let actual_ctx = find_provider_context_name(&installed, &resolved);
             return enter_context(settings, installed, &actual_ctx, namespace_name.as_deref(), recursive);
         }

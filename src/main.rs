@@ -25,7 +25,7 @@ fn main() -> Result<()> {
 
     #[cfg(feature = "remote")]
     {
-        providers::remote::cache::init();
+        providers::remote::cache::init()?;
         if matches!(kubie, Kubie::ClearCache) {
             providers::remote::cache::clear()?;
             println!("Provider cache cleared. Metadata and kubeconfigs will be fetched again when needed.");

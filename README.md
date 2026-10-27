@@ -159,7 +159,9 @@ the first matching context. Put them in separate provider accounts or rename the
 
 `kubie clear-cache` removes `$XDG_CACHE_HOME/kubie/providers/metadata.json`
 (default `~/.cache/kubie/providers/metadata.json`) and downloaded provider kubeconfigs
-in `/tmp/kubie-providers-<uid>/configs`. It preserves configuration, original
+in `$XDG_CACHE_HOME/kubie/providers/configs` (default
+`~/.cache/kubie/providers/configs`). It also clears the legacy
+`/tmp/kubie-providers-<uid>/configs` cache. It preserves configuration, original
 kubeconfigs, history, frecency, and active isolated sessions. It makes no provider
 API calls. The next normal sync/hydration repopulates the caches.
 Clearing is best-effort against concurrent syncs, so avoid running a sync at the
@@ -176,8 +178,11 @@ for example `'rancher/monitoring-*'`. `--local` treats slash-containing context 
 as literal local kubeconfig names. Context resolution is cheapest-first:
 local kubeconfigs, then cached provider metadata (only the matching cluster's
 kubeconfig is downloaded), and a full provider sync only when nothing matched.
-Downloaded kubeconfigs are cached for 24 hours, so repeated `kubie exec` calls
-against the same cluster are instant.
+Downloaded kubeconfigs are cached for 24 hours under
+`$XDG_CACHE_HOME/kubie/providers/configs` (default `~/.cache/kubie/providers/configs`).
+Cache directories use owner-only `0700` permissions and files are atomically written
+with `0600` permissions. Existing cache permissions are tightened before use.
+Old `/tmp` kubeconfigs are not reused after upgrading; `kubie clear-cache` removes them.
 
 An agent skill describing this workflow lives in [`skills/kubie`](skills/kubie/SKILL.md).
 

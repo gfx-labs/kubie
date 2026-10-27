@@ -94,8 +94,7 @@ pub fn ensure_hydrated(cluster: &ClusterInfo, providers: &[NamedProvider]) -> an
             )
         })?;
 
-    let filename = cache::config_filename(cluster);
-    let path = cache::configs_dir().join(&filename);
+    let path = cache::checked_config_path(cluster)?;
 
     if path.exists() {
         let fresh = path.metadata().and_then(|m| m.modified()).is_ok_and(|t| {
@@ -137,11 +136,6 @@ pub fn hydrate_all_configs(clusters: &[ClusterInfo], providers: &[NamedProvider]
         }
     }
     paths
-}
-
-/// Delete an ephemeral kubeconfig file after it has been consumed.
-pub fn cleanup_config(path: &std::path::Path) {
-    let _ = std::fs::remove_file(path);
 }
 
 #[cfg(test)]

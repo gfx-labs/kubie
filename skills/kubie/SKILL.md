@@ -68,8 +68,11 @@ Resolution is cheapest-first and avoids network calls when possible:
    consulted next, and only the *matching* cluster's kubeconfig is downloaded.
 3. A full provider sync happens only when nothing matched anywhere.
 
-Downloaded kubeconfigs are cached for 24 hours in `/tmp/kubie-providers-<uid>/configs/`,
-so repeated `kubie exec` calls against the same cluster are effectively instant.
+Downloaded kubeconfigs are cached for 24 hours in
+`$XDG_CACHE_HOME/kubie/providers/configs/` (default `~/.cache/kubie/providers/configs/`).
+Cache directories are owner-only (`0700`); files are atomically written with `0600`
+permissions. Existing cache permissions are tightened before use. Legacy `/tmp`
+provider caches are not reused and can be removed with `kubie clear-cache`.
 
 Flags:
 
@@ -98,7 +101,8 @@ This writes an isolated temp kubeconfig and prints its path. Delete it when done
 - `kubie clear-cache` removes provider discovery metadata at
   `$XDG_CACHE_HOME/kubie/providers/metadata.json` (default
   `~/.cache/kubie/providers/metadata.json`) and downloaded provider kubeconfigs in
-  `/tmp/kubie-providers-<uid>/configs`. Configuration, original kubeconfigs,
+  `$XDG_CACHE_HOME/kubie/providers/configs` (default `~/.cache/kubie/providers/configs`),
+  plus the legacy `/tmp/kubie-providers-<uid>/configs`. Configuration, original kubeconfigs,
   history, frecency, and active isolated sessions are preserved. It makes no
   provider API calls. The next normal sync/hydration repopulates the caches.
   Clearing is best-effort against concurrent syncs, so avoid running a sync at
