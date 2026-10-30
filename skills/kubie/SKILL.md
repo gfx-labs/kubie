@@ -27,13 +27,13 @@ kubie list --no-sync      # cached provider metadata only, never hits the networ
 
 Prefer `kubie list --json` when you need cluster endpoints or to distinguish
 local from cloud contexts. Provider contexts can be selected with `provider/name`,
-such as `rancher/monitoring` or `digitalocean/monitoring`. Use
+such as `rancher/my-cluster` or `digitalocean/my-cluster`. Use
 `provider/account/name` when a provider has matching names in multiple accounts.
 A recognized provider prefix reserves qualified syntax, and malformed qualified selectors
 fail closed instead of falling back to local/fuzzy matching. `@id:<hex>` is reserved for opaque ID
 selectors; copy the `selector` field from `kubie list --json` rather than constructing one.
 Use `--local` for literal slash-containing local context names. Quote wildcard selectors, for example
-`kubie exec 'rancher/monitoring-*' default kubectl get pods`. Older bare context-history
+`kubie exec 'rancher/my-cluster-*' default kubectl get pods`. Older bare context-history
 entries remain bare until selected again by a qualified name. Same-name contexts across files
 within one kubeconfig-provider account are still merged and may resolve to the first match. Put
 them in separate provider accounts or rename the local contexts.
@@ -42,11 +42,11 @@ Prefer `kubie list --no-sync` in tight loops.
 ## Running commands
 
 ```bash
-kubie exec rome default kubectl get pods
-kubie exec do-tor1-rome kube-system kubectl get deploy -o json
-kubie exec 'do-tor1-*' default kubectl get nodes      # wildcard: runs per matching context
-kubie exec 'rancher/monitoring-*' default kubectl get pods # provider-qualified wildcard
-kubie exec -e 'do-*' default kubectl get ns           # stop at first failure
+kubie exec my-cluster default kubectl get pods
+kubie exec prod-us-east-1 kube-system kubectl get deploy -o json
+kubie exec 'prod-*' default kubectl get nodes          # wildcard: runs per matching context
+kubie exec 'rancher/my-cluster-*' default kubectl get pods # provider-qualified wildcard
+kubie exec -e 'staging-*' default kubectl get ns       # stop at first failure
 ```
 
 Rules:
@@ -84,7 +84,7 @@ Flags:
 For tools that need a real file (helm, k9s, terraform):
 
 ```bash
-export KUBECONFIG="$(kubie export rome default)"
+export KUBECONFIG="$(kubie export my-cluster default)"
 ```
 
 This writes an isolated temp kubeconfig and prints its path. Delete it when done.
@@ -109,5 +109,5 @@ This writes an isolated temp kubeconfig and prints its path. Delete it when done
   the same time. There are no flags or dry-run mode. It works even if kubie's
   configuration is malformed.
 - `No context matching X` - run `kubie list` to see valid names; provider
-  contexts often carry a prefix such as `do-tor1-`.
+  contexts often carry a provider or region prefix, such as `<provider>-<region>-`.
 - Stale cluster list - run `kubie clear-cache`, then `kubie list` to rediscover providers.
